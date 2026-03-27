@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>试题作答 - MicroQuizHub</title>
+    <!-- 使用国内CDN引入KaTeX库 -->
+    <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/KaTeX/0.16.9/katex.min.css">
+    <script defer src="https://cdn.bootcdn.net/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+    <script defer src="https://cdn.bootcdn.net/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+    <!-- 使用国内CDN引入marked库 -->
+    <script src="https://cdn.bootcdn.net/ajax/libs/marked/4.3.0/marked.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Microsoft YaHei", sans-serif;
+        }
+        
+        body {
+            background-color: #f5f5f5;
+            padding: 10px;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+			overflow: hidden;
+        }
+        
+        /* Token输入页面样式 */
+        .ticket-container {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 40px;
+            width: 400px;
+            max-width: 90%;
+        }
+        
+        .ticket-title {
+            text-align: center;
+            font-size: 28px;
+            margin-bottom: 30px;
+            color: #333;
+        }
+        
+        .ticket-input {
+            margin-bottom: 20px;
+        }
+        
+        .ticket-input label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #555;
+        }
+        
+        .ticket-input input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        
+        .ticket-btn {
+            width: 100%;
+            padding: 12px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+            margin-top: 10px;
+        }
+        
+        .ticket-btn:hover {
+            background-color: #45a049;
+        }
+        
+        .ticket-btn:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        
+        /* 状态消息 (截止/错误提示) */
+        .quiz-status-message {
+            text-align: center;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 6px;
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            font-weight: bold;
+        }
+        
+        .loading-container {
+            text-align: center;
+            padding: 40px;
+        }
+        
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4CAF50;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* 主页面容器（初始隐藏） */
+        .main-container {
+            display: flex;
+            height: calc(100vh - 20px);
+            gap: 15px;
+            width: 100%;
+            display: none;
+        }
+        
+        .questions-panel {
+            flex: 1;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .answer-panel {
+            flex: 0 0 400px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .panel-title {
+            text-align: center;
+            font-size: 24px;
+            margin-bottom: 15px;
+            color: #333;
+        }
+        
+        .notice {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: #f0f8ff;
+            border-radius: 5px;
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .questions-container {
+            flex: 1;
+            overflow-y: auto;
+            padding-right: 10px;
+        }
+        
+        .answers-container {
+            flex: 1;
+            overflow-y: auto;
+            padding-right: 10px;
+        }
+        
+        .question-content {
+            line-height: 1.6;
+            font-size: 16px;
+            color: #333;
+        }
+        
+        .question-content img {
+            max-width: 100%;
+            height: auto;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        
+        .question-content pre {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+        
+        .question-content code {
+            background-color: #f5f5f5;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        
+        /* PDF 内嵌样式 */
+        .pdf-embed {
+            width: 100%;
+            height: 70vh;
+            min-height: 500px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+        }
+        
+        .unsupported-format {
+            padding: 40px;
+            text-align: center;
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            color: #d9534f;
+            font-weight: bold;
+        }
+        
+        .answer-item {
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px dashed #eee;
+        }
+        
+        .answer-item-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        /* 单选题和多选题选项横向排列 */
+        .options-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px 20px;
+            margin-top: 8px;
+        }
+        
+        .option {
+            display: flex;
+            align-items: center;
+            white-space: nowrap;
+        }
+        
+        .option input[type="radio"],
+        .option input[type="checkbox"] {
+            margin-right: 5px;
+            width: 16px;
+            height: 16px;
+        }
+        
+        .option label {
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        .text-input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        .textarea-input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            resize: vertical;
+            min-height: 80px;
+            line-height: 1.5;
+			overflow: hidden;
+        }
+        
+        .formula-input-container {
+            margin-top: 10px;
+        }
+        
+        .single-line-container {
+            display: flex;
+            gap: 15px;
+            align-items: flex-start;
+        }
+        
+        .single-line-input {
+            flex: 1;
+        }
+        
+        .single-line-preview {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            min-height: 40px;
+            background-color: #f9f9f9;
+        }
+        
+        .multiple-line-container {
+            display: flex;
+            gap: 15px;
+        }
+        
+        .multiple-line-input {
+            flex: 1;
+        }
+        
+        .multiple-line-preview {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            min-height: 120px;
+            background-color: #f9f9f9;
+            overflow-y: auto;
+            line-height: 1.5;
+        }
+        
+        .submit-area {
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+        
+        .submit-btn {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        
+        .submit-btn:hover {
+            background-color: #45a049;
+        }
+        
+        .submit-btn:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        
+        /* 通知样式 */
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 4px;
+            color: white;
+            font-weight: bold;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            animation: slideIn 0.3s ease-out;
+            max-width: 300px;
+        }
+        
+        .notification.success {
+            background-color: #4CAF50;
+        }
+        
+        .notification.error {
+            background-color: #f44336;
+        }
+        
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        /* 滚动条样式 */
+        .questions-container::-webkit-scrollbar,
+        .answers-container::-webkit-scrollbar,
+        .multiple-line-preview::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .questions-container::-webkit-scrollbar-track,
+        .answers-container::-webkit-scrollbar-track,
+        .multiple-line-preview::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        
+        .questions-container::-webkit-scrollbar-thumb,
+        .answers-container::-webkit-scrollbar-thumb,
+        .multiple-line-preview::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+        
+        .questions-container::-webkit-scrollbar-thumb:hover,
+        .answers-container::-webkit-scrollbar-thumb:hover,
+        .multiple-line-preview::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+    </style>
+</head>
+<body>
+    <!-- Token输入页面容器 -->
+    <div class="ticket-container" id="ticketContainer">
+        <h2 class="ticket-title">试题作答</h2>
+        <div id="quizStatusMessage" class="quiz-status-message" style="display: none;"></div>
+        <div id="tokenInputArea">
+            <div class="ticket-input">
+                <label for="ticketInput">身份令牌：</label>
+                <input type="text" id="ticketInput" placeholder="请输入身份令牌">
+            </div>
+            <button class="ticket-btn" id="ticketBtn">验证</button>
+        </div>
+    </div>
+    
+    <!-- 加载中提示 -->
+    <div class="loading-container" id="loadingContainer" style="display: none;">
+        <div class="loading-spinner"></div>
+        <p>正在加载试题</p>
+    </div>
+    
+    <!-- 主页面容器 -->
+    <div class="main-container" id="mainContainer">
+        <!-- 左侧题目区域 -->
+        <div class="questions-panel">
+            <div class="questions-container" id="questionsContainer">
+                <div class="question-content" id="questionContent">
+                    <!-- 试题内容将通过JavaScript动态渲染 -->
+                </div>
+            </div>
+        </div>
+        
+        <!-- 右侧答题区域 -->
+        <div class="answer-panel">
+            <div class="answers-container" id="answersContainer">
+                <h2 class="panel-title">请在此区域作答</h2>
+                <!-- 答题项将通过JavaScript动态生成 -->
+                <div id="answerItemsContainer"></div>
+                
+                <!-- 提交按钮区域 -->
+                <div class="submit-area">
+                    <button class="submit-btn" id="submitBtn" disabled>提交</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 全局变量 (新API适配)
+        let quizId = '';
+        let tokenValue = '';
+        let quizConfig = null;          // 存储quiz配置 { paper, allow_resubmit, deadline }
+        let paperConfig = null;         // 存储paper配置 { id, content, type, answer }
+        let answerSheet = [];            // 答题卡结构 (来自 paper.answer)
+        let userAnswers = [];            // 用户填写的答案
+        let paperContentUrl = '';        // 试卷内容URL
+        let paperType = '';              // markdown / pdf / 其他
+        let allowResubmit = false;
+        
+        // DOM元素
+        const ticketContainer = document.getElementById('ticketContainer');
+        const loadingContainer = document.getElementById('loadingContainer');
+        const mainContainer = document.getElementById('mainContainer');
+        const ticketInput = document.getElementById('ticketInput');
+        const ticketBtn = document.getElementById('ticketBtn');
+        const questionContent = document.getElementById('questionContent');
+        const answerItemsContainer = document.getElementById('answerItemsContainer');
+        const submitBtn = document.getElementById('submitBtn');
+        const quizStatusMessageDiv = document.getElementById('quizStatusMessage');
+        const tokenInputArea = document.getElementById('tokenInputArea');
+        
+        // 辅助函数：显示通知
+        function showNotification(message, type) {
+            const existingNotification = document.querySelector('.notification');
+            if (existingNotification) existingNotification.remove();
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            setTimeout(() => {
+                if (notification.parentNode) notification.parentNode.removeChild(notification);
+            }, 3000);
+        }
+        
+        // 渲染数学公式 (对指定容器)
+        function renderMath(element) {
+            if (typeof renderMathInElement !== 'undefined') {
+                renderMathInElement(element, {
+                    delimiters: [
+                        {left: "$$", right: "$$", display: true},
+                        {left: "$", right: "$", display: false},
+                        {left: "\\(", right: "\\)", display: false},
+                        {left: "\\[", right: "\\]", display: true}
+                    ],
+                    throwOnError: false
+                });
+            }
+        }
+        
+        // 第一步：获取Quiz配置，检查截止，显示/隐藏Token输入区域
+        async function fetchQuizConfig() {
+            const urlParams = new URLSearchParams(window.location.search);
+            quizId = urlParams.get('quiz');
+            if (!quizId) {
+                quizStatusMessageDiv.style.display = 'block';
+                quizStatusMessageDiv.textContent = '未选择测试';
+                tokenInputArea.style.display = 'none';
+                ticketBtn.disabled = true;
+                return false;
+            }
+            
+            try {
+                const response = await fetch(`/quiz/${quizId}`);
+                if (response.status === 404) {
+                    quizStatusMessageDiv.style.display = 'block';
+                    quizStatusMessageDiv.textContent = '测验不存在';
+                    tokenInputArea.style.display = 'none';
+                    ticketBtn.disabled = true;
+                    return false;
+                } else if (response.status === 500) {
+                    quizStatusMessageDiv.style.display = 'block';
+                    quizStatusMessageDiv.textContent = '服务器异常';
+                    tokenInputArea.style.display = 'none';
+                    ticketBtn.disabled = true;
+                    return false;
+                } else if (!response.ok) {
+                    quizStatusMessageDiv.style.display = 'block';
+                    quizStatusMessageDiv.textContent = '数据异常';
+                    tokenInputArea.style.display = 'none';
+                    ticketBtn.disabled = true;
+                    return false;
+                }
+                
+                const data = await response.json();
+                quizConfig = {
+                    paper: data.paper,
+                    allow_resubmit: data.allow_resubmit,
+                    deadline: data.deadline  // 时间戳(ms) 或 null
+                };
+                allowResubmit = data.allow_resubmit;
+                
+                // 截止判断 (deadline 为毫秒时间戳)
+                if (quizConfig.deadline !== null && quizConfig.deadline !== undefined) {
+                    const deadlineMs = parseInt(quizConfig.deadline);
+                    if (!isNaN(deadlineMs) && Date.now() > deadlineMs) {
+                        quizStatusMessageDiv.style.display = 'block';
+                        quizStatusMessageDiv.textContent = '测试已截止';
+                        tokenInputArea.style.display = 'none';
+                        ticketBtn.disabled = true;
+                        return false;
+                    }
+                }
+                // 有效且未截止，显示Token输入区域（本来就是显示的，确保隐藏状态消息）
+                quizStatusMessageDiv.style.display = 'none';
+                tokenInputArea.style.display = 'block';
+                ticketBtn.disabled = false;
+                return true;
+            } catch (err) {
+                console.error(err);
+                quizStatusMessageDiv.style.display = 'block';
+                quizStatusMessageDiv.textContent = '数据异常';
+                tokenInputArea.style.display = 'none';
+                ticketBtn.disabled = true;
+                return false;
+            }
+        }
+        
+        // Token验证
+        async function verifyToken(token) {
+            try {
+                const response = await fetch('/token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ quiz: quizId, token: token })
+                });
+                const result = await response.json();
+                if (result.code === 0) return true;
+                else if (result.code === 1) {
+                    showNotification('身份令牌无效', 'error');
+                    return false;
+                } else {
+                    showNotification('数据异常', 'error');
+                    return false;
+                }
+            } catch (err) {
+                showNotification(`网络错误: ${err.message}`, 'error');
+                return false;
+            }
+        }
+        
+        // 获取Paper配置 (包含answer结构和content URL)
+        async function fetchPaperConfig(paperId) {
+            try {
+                const response = await fetch(`/paper/${paperId}`);
+                if (response.status === 500) {
+                    showNotification('服务器异常', 'error');
+                    return null;
+                } else if (!response.ok) {
+                    showNotification('试卷异常', 'error');
+                    return null;
+                }
+                const data = await response.json();
+                return data;
+            } catch (err) {
+                showNotification(`网络错误: ${err.message}`, 'error');
+                return null;
+            }
+        }
+        
+        // 获取试卷实际内容 (根据content_url和type)
+        async function fetchPaperContent(url, type) {
+            if (type === 'markdown') {
+                try {
+                    const resp = await fetch(url);
+                    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                    return await resp.text();
+                } catch (err) {
+                    showNotification('加载试卷内容失败', 'error');
+                    return null;
+                }
+            } else if (type === 'pdf') {
+                // PDF 直接返回URL即可，不需要fetch文本
+                return url;
+            } else {
+                showNotification(`不支持的试卷格式: ${type}`, 'error');
+                return null;
+            }
+        }
+        
+        // 渲染左侧试卷内容 (markdown渲染或PDF嵌入)
+        function renderPaperContent(contentData, type) {
+            questionContent.innerHTML = '';
+            if (type === 'markdown' && typeof contentData === 'string') {
+                if (typeof marked !== 'undefined') {
+                    questionContent.innerHTML = marked.parse(contentData);
+                } else {
+                    questionContent.innerHTML = `<pre>${contentData}</pre>`;
+                }
+                renderMath(questionContent);
+            } else if (type === 'pdf' && typeof contentData === 'string') {
+                const iframe = document.createElement('iframe');
+                iframe.src = contentData;
+                iframe.className = 'pdf-embed';
+                iframe.setAttribute('frameborder', '0');
+                questionContent.appendChild(iframe);
+            } else {
+                questionContent.innerHTML = '<div class="unsupported-format">当前试卷格式不支持预览</div>';
+            }
+        }
+        
+        // 渲染答题卡 (完全复用原逻辑，兼容answerSheet结构)
+        function renderAnswerSheetFromConfig() {
+            answerItemsContainer.innerHTML = '';
+            userAnswers = new Array(answerSheet.length);
+            
+            answerSheet.forEach((item, index) => {
+                // 初始化答案结构
+                switch (item.type) {
+                    case 'single_selection':
+                        userAnswers[index] = null;
+                        break;
+                    case 'multiple_selection':
+                        userAnswers[index] = [];
+                        break;
+                    case 'single_line':
+                    case 'multiple_line':
+                        userAnswers[index] = '';
+                        break;
+                    default:
+                        userAnswers[index] = null;
+                }
+                
+                const answerItem = document.createElement('div');
+                answerItem.className = 'answer-item';
+                answerItem.dataset.questionIndex = index;
+                answerItem.dataset.questionType = item.type;
+                
+                const title = document.createElement('div');
+                title.className = 'answer-item-title';
+                title.textContent = item.prompt;
+                answerItem.appendChild(title);
+                
+                switch (item.type) {
+                    case 'single_selection':
+                        renderSingleSelection(answerItem, item, index);
+                        break;
+                    case 'multiple_selection':
+                        renderMultipleSelection(answerItem, item, index);
+                        break;
+                    case 'single_line':
+                        renderSingleLine(answerItem, item, index);
+                        break;
+                    case 'multiple_line':
+                        renderMultipleLine(answerItem, item, index);
+                        break;
+                    default:
+                        console.warn(`未知题目类型: ${item.type}`);
+                }
+                answerItemsContainer.appendChild(answerItem);
+            });
+        }
+        
+        // 单选题渲染
+        function renderSingleSelection(container, item, index) {
+            const optionsContainer = document.createElement('div');
+            optionsContainer.className = 'options-container';
+            item.options.forEach((option, optIdx) => {
+                const optionDiv = document.createElement('div');
+                optionDiv.className = 'option';
+                const radio = document.createElement('input');
+                radio.type = 'radio';
+                radio.name = `question_${index}`;
+                radio.id = `question_${index}_option_${optIdx}`;
+                radio.value = optIdx;
+                radio.addEventListener('change', function() {
+                    if (this.checked) userAnswers[index] = optIdx;
+                });
+                const label = document.createElement('label');
+                label.htmlFor = `question_${index}_option_${optIdx}`;
+                label.textContent = option;
+                optionDiv.appendChild(radio);
+                optionDiv.appendChild(label);
+                optionsContainer.appendChild(optionDiv);
+            });
+            container.appendChild(optionsContainer);
+        }
+        
+        // 多选题渲染
+        function renderMultipleSelection(container, item, index) {
+            const optionsContainer = document.createElement('div');
+            optionsContainer.className = 'options-container';
+            item.options.forEach((option, optIdx) => {
+                const optionDiv = document.createElement('div');
+                optionDiv.className = 'option';
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.name = `question_${index}`;
+                checkbox.id = `question_${index}_option_${optIdx}`;
+                checkbox.value = optIdx;
+                checkbox.addEventListener('change', function() {
+                    if (this.checked) {
+                        userAnswers[index].push(optIdx);
+                    } else {
+                        const idx = userAnswers[index].indexOf(optIdx);
+                        if (idx > -1) userAnswers[index].splice(idx, 1);
+                    }
+                    userAnswers[index] = [...new Set(userAnswers[index])];
+                });
+                const label = document.createElement('label');
+                label.htmlFor = `question_${index}_option_${optIdx}`;
+                label.textContent = option;
+                optionDiv.appendChild(checkbox);
+                optionDiv.appendChild(label);
+                optionsContainer.appendChild(optionDiv);
+            });
+            container.appendChild(optionsContainer);
+        }
+        
+        // 单行填空
+        function renderSingleLine(container, item, index) {
+            const inputContainer = document.createElement('div');
+            inputContainer.className = 'single-line-container';
+            const inputDiv = document.createElement('div');
+            inputDiv.className = 'single-line-input';
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'text-input';
+            input.placeholder = '请按LaTeX格式输入';
+            input.addEventListener('input', function() {
+                userAnswers[index] = this.value;
+                updateFormulaPreview(`preview_single_${index}`, this.value, false);
+            });
+            const previewDiv = document.createElement('div');
+            previewDiv.className = 'single-line-preview';
+            previewDiv.id = `preview_single_${index}`;
+            inputDiv.appendChild(input);
+            inputContainer.appendChild(inputDiv);
+            inputContainer.appendChild(previewDiv);
+            container.appendChild(inputContainer);
+        }
+        
+        // 多行填空
+        function renderMultipleLine(container, item, index) {
+            const inputContainer = document.createElement('div');
+            inputContainer.className = 'multiple-line-container';
+            const inputDiv = document.createElement('div');
+            inputDiv.className = 'multiple-line-input';
+            const textarea = document.createElement('textarea');
+            textarea.className = 'textarea-input';
+            textarea.placeholder = '请按LaTeX格式输入，换行请输入\\newline';
+            textarea.addEventListener('input', function() {
+                userAnswers[index] = this.value;
+                this.style.height = 'auto';
+                this.style.height = Math.max(80, this.scrollHeight) + 'px';
+                updateFormulaPreview(`preview_multiple_${index}`, this.value, true);
+            });
+            const previewDiv = document.createElement('div');
+            previewDiv.className = 'multiple-line-preview';
+            previewDiv.id = `preview_multiple_${index}`;
+            setTimeout(() => { textarea.style.height = '80px'; }, 10);
+            inputDiv.appendChild(textarea);
+            inputContainer.appendChild(inputDiv);
+            inputContainer.appendChild(previewDiv);
+            container.appendChild(inputContainer);
+        }
+        
+        function updateFormulaPreview(previewId, latexCode, displayMode) {
+            const previewElement = document.getElementById(previewId);
+            if (!previewElement) return;
+            previewElement.innerHTML = '';
+            if (!latexCode) return;
+            try {
+                if (typeof katex !== 'undefined') {
+                    katex.render(latexCode, previewElement, { throwOnError: false, displayMode: displayMode });
+                } else {
+                    previewElement.innerHTML = `<span style="color:#f44336;">LaTeX库未加载</span>`;
+                }
+            } catch (error) {
+                previewElement.innerHTML = `<span style="color:#f44336;">LaTeX解析错误</span>`;
+            }
+        }
+        
+        // 提交答卷 (适配新API)
+        async function submitAnswers() {
+            submitBtn.disabled = true;
+            submitBtn.textContent = '正在提交';
+            try {
+                const payload = {
+                    quiz: quizId,
+                    token: tokenValue,
+                    answer: userAnswers
+                };
+                const response = await fetch('/submit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                const code = result.code;
+                if (code === 0) {
+                    showNotification('提交成功', 'success');
+                    submitBtn.textContent = '提交';
+                    submitBtn.disabled = false;
+                    // 若不允许重复提交，成功后禁用提交按钮
+                    if (!allowResubmit) {
+                        submitBtn.disabled = true;
+                        submitBtn.textContent = '已提交';
+                    }
+                } else if (code === 1) {
+                    showNotification('您已经提交过，无法再次提交', 'error');
+                    submitBtn.disabled = true;
+                    submitBtn.textContent = '已提交';
+                } else if (code === 2) {
+                    showNotification('提交失败：测验已截止', 'error');
+                    submitBtn.disabled = true;
+                    submitBtn.textContent = '已截止';
+                } else {
+                    showNotification('提交失败：数据异常', 'error');
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = '提交';
+                }
+            } catch (err) {
+                showNotification(`网络错误: ${err.message}`, 'error');
+                submitBtn.disabled = false;
+                submitBtn.textContent = '提交';
+            }
+        }
+        
+        // 完整流程：验证Token -> 加载Paper配置 -> 获取试卷内容 -> 渲染
+        async function onTokenVerified() {
+            // 显示加载，隐藏Token界面
+            ticketContainer.style.display = 'none';
+            loadingContainer.style.display = 'block';
+            
+            try {
+                const paperId = quizConfig.paper;
+                if (!paperId) throw new Error('缺少paper信息');
+                // 获取paper配置 (包含answer与content URL)
+                const paperConf = await fetchPaperConfig(paperId);
+                if (!paperConf) {
+                    throw new Error('获取试卷配置失败');
+                }
+                paperConfig = paperConf;
+                answerSheet = paperConf.answer || [];
+                paperContentUrl = paperConf.content;
+                paperType = paperConf.type;
+                
+                if (!paperContentUrl) throw new Error('试卷内容URL缺失');
+                // 获取实际试卷内容
+                let contentData = null;
+                if (paperType === 'markdown') {
+                    contentData = await fetchPaperContent(paperContentUrl, 'markdown');
+                    if (contentData === null) throw new Error('加载markdown内容失败');
+                } else if (paperType === 'pdf') {
+                    contentData = paperContentUrl;
+                } else {
+                    throw new Error(`不支持的试卷类型: ${paperType}`);
+                }
+                // 渲染左侧试卷
+                renderPaperContent(contentData, paperType);
+                // 渲染右侧答题卡
+                renderAnswerSheetFromConfig();
+                // 启用提交按钮
+                submitBtn.disabled = false;
+                // 切换到主界面
+                loadingContainer.style.display = 'none';
+                mainContainer.style.display = 'flex';
+            } catch (err) {
+                console.error(err);
+                showNotification(err.message || '加载试题失败，请重试', 'error');
+                // 出错后返回Token输入页面
+                loadingContainer.style.display = 'none';
+                ticketContainer.style.display = 'block';
+                ticketBtn.disabled = false;
+                ticketBtn.textContent = '验证';
+                tokenValue = '';
+                // 清空输入
+                ticketInput.value = '';
+            }
+        }
+        
+        // 提交Token验证
+        async function submitToken() {
+            const inputToken = ticketInput.value.trim();
+            if (!inputToken) {
+                showNotification('请输入身份令牌', 'error');
+                return;
+            }
+            ticketBtn.disabled = true;
+            ticketBtn.textContent = '正在验证';
+            const isValid = await verifyToken(inputToken);
+            if (isValid) {
+                tokenValue = inputToken;
+                await onTokenVerified();
+            } else {
+                ticketBtn.disabled = false;
+                ticketBtn.textContent = '验证';
+            }
+        }
+        
+        // 页面入口
+        document.addEventListener('DOMContentLoaded', async () => {
+            // 先获取Quiz配置并决定是否显示Token输入区
+            const isQuizValid = await fetchQuizConfig();
+            if (!isQuizValid) {
+                // 已经显示了错误/截止消息，Token区域隐藏，按钮禁用，无需绑定额外事件
+                ticketBtn.disabled = true;
+                return;
+            }
+            // 绑定Token验证事件
+            ticketBtn.addEventListener('click', submitToken);
+            ticketInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') submitToken();
+            });
+            // 提交答卷事件
+            submitBtn.addEventListener('click', submitAnswers);
+            // 初始化KaTeX渲染（全局）
+            if (typeof renderMathInElement !== 'undefined') {
+                renderMathInElement(document.body, {
+                    delimiters: [
+                        {left: "$$", right: "$$", display: true},
+                        {left: "$", right: "$", display: false},
+                        {left: "\\(", right: "\\)", display: false},
+                        {left: "\\[", right: "\\]", display: true}
+                    ],
+                    throwOnError: false
+                });
+            }
+        });
+    </script>
+</body>
+</html>

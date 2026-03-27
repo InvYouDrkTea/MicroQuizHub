@@ -1,0 +1,8 @@
+.vscode/
+src/__pycache__/
+attachment/
+paper/
+quiz/
+group/
+
+server.py
