@@ -1,7 +1,11 @@
 from flask import Flask, request, abort, render_template, send_file, jsonify
 import os
-import jinja2.exceptions.TemplateNotFound
 from . import resource
+
+os.makedirs("attachment/", exist_ok=True)
+os.makedirs("group/", exist_ok=True)
+os.makedirs("paper/", exist_ok=True)
+os.makedirs("quiz/", exist_ok=True)
 
 res = resource.Resource()
 
@@ -16,7 +20,7 @@ def return_json(code, message):
     return_json = {"code": code, "message": message}
     return return_json
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder="page/")
 
 @app.route("/page/<path:filename>")
 def page(filename):
@@ -80,6 +84,6 @@ def submit(): # To be modified
 @app.route("/attachment/<path:filename>")
 def attachment(filename):
     try:
-        return send_file(os.path.join("attachment/", filename))
+        return send_file(os.path.join(os.getcwd(), "attachment/", filename))
     except FileNotFoundError:
         return abort(404, "Attachment not found")
