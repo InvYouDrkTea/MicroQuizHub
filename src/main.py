@@ -1,4 +1,5 @@
 from flask import Flask, request, abort, render_template, send_file, jsonify
+from jinja2 import TemplateNotFound
 import os
 from . import resource
 
@@ -26,7 +27,7 @@ app = Flask(__name__, template_folder="page/")
 def page(filename):
     try:
         return render_template(filename)
-    except jinja2.exceptions.TemplateNotFound:
+    except TemplateNotFound:
         return abort(404, "Page not found")
 
 @app.route("/quiz/<quiz_id>")

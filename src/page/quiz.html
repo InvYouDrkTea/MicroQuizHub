@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>测试作答 - MicroQuizHub</title>
+    <title>测验作答 - MicroQuizHub</title>
     <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/KaTeX/0.16.9/katex.min.css">
     <script defer src="https://cdn.bootcdn.net/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
     <script defer src="https://cdn.bootcdn.net/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
@@ -26,7 +26,7 @@
         }
         
         /* Token输入页面样式 */
-        .ticket-container {
+        .token-container {
             background-color: white;
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
@@ -35,25 +35,25 @@
             max-width: 90%;
         }
         
-        .ticket-title {
+        .token-title {
             text-align: center;
             font-size: 28px;
             margin-bottom: 30px;
             color: #333;
         }
         
-        .ticket-input {
+        .token-input {
             margin-bottom: 20px;
         }
         
-        .ticket-input label {
+        .token-input label {
             display: block;
             margin-bottom: 8px;
             font-weight: bold;
             color: #555;
         }
         
-        .ticket-input input {
+        .token-input input {
             width: 100%;
             padding: 12px;
             border: 1px solid #ddd;
@@ -61,7 +61,7 @@
             font-size: 16px;
         }
         
-        .ticket-btn {
+        .token-btn {
             width: 100%;
             padding: 12px;
             background-color: #4CAF50;
@@ -74,11 +74,11 @@
             margin-top: 10px;
         }
         
-        .ticket-btn:hover {
+        .token-btn:hover {
             background-color: #45a049;
         }
         
-        .ticket-btn:disabled {
+        .token-btn:disabled {
             background-color: #cccccc;
             cursor: not-allowed;
         }
@@ -94,7 +94,6 @@
             border: 1px solid #f5c6cb;
             font-weight: bold;
         }
-        /* 灰色加载状态专用样式 */
         .quiz-status-message.info {
             background-color: #e9ecef;
             color: #495057;
@@ -159,19 +158,18 @@
             color: #333;
         }
         
-        .notice {
+        .auto-save-status {
             text-align: center;
-            margin-bottom: 20px;
-            padding: 10px;
-            background-color: #f0f8ff;
-            border-radius: 5px;
-            font-size: 14px;
-            color: #666;
+            font-size: 13px;
+            color: #f44336;
+            margin-bottom: 10px;
+            min-height: 20px;
         }
         
         .questions-container {
             flex: 1;
             overflow-y: auto;
+            overflow-x: hidden;
             padding-right: 10px;
         }
         
@@ -181,15 +179,20 @@
             padding-right: 10px;
         }
         
+        /* 题目区域 - 水平滚动条在内容溢出时自动显示 */
         .question-content {
             line-height: 1.6;
             font-size: 16px;
             color: #333;
+            overflow-x: auto;
+            overflow-y: visible;
         }
         
+        /* 图片响应式：最大宽度100%，高度自适应，保持原始比例 */
         .question-content img {
             max-width: 100%;
             height: auto;
+            display: block;
             margin: 10px 0;
             border-radius: 4px;
         }
@@ -238,7 +241,6 @@
             margin-bottom: 10px;
         }
         
-        /* 单选题和多选题选项横向排列 */
         .options-container {
             display: flex;
             flex-wrap: wrap;
@@ -382,34 +384,39 @@
             }
         }
         
-        /* 滚动条样式 */
+        /* 滚动条样式（同时应用于水平和竖直） */
         .questions-container::-webkit-scrollbar,
         .answers-container::-webkit-scrollbar,
-        .multiple-line-preview::-webkit-scrollbar {
+        .multiple-line-preview::-webkit-scrollbar,
+        .question-content::-webkit-scrollbar {
             width: 8px;
+            height: 8px;
         }
         
         .questions-container::-webkit-scrollbar-track,
         .answers-container::-webkit-scrollbar-track,
-        .multiple-line-preview::-webkit-scrollbar-track {
+        .multiple-line-preview::-webkit-scrollbar-track,
+        .question-content::-webkit-scrollbar-track {
             background: #f1f1f1;
             border-radius: 4px;
         }
         
         .questions-container::-webkit-scrollbar-thumb,
         .answers-container::-webkit-scrollbar-thumb,
-        .multiple-line-preview::-webkit-scrollbar-thumb {
+        .multiple-line-preview::-webkit-scrollbar-thumb,
+        .question-content::-webkit-scrollbar-thumb {
             background: #c1c1c1;
             border-radius: 4px;
         }
         
         .questions-container::-webkit-scrollbar-thumb:hover,
         .answers-container::-webkit-scrollbar-thumb:hover,
-        .multiple-line-preview::-webkit-scrollbar-thumb:hover {
+        .multiple-line-preview::-webkit-scrollbar-thumb:hover,
+        .question-content::-webkit-scrollbar-thumb:hover {
             background: #a8a8a8;
         }
         
-        /* ========= 移动端适配：上下布局 ========= */
+        /* 移动端适配：上下布局 */
         @media (max-width: 768px) {
             body {
                 overflow-y: auto;
@@ -437,7 +444,6 @@
             .answer-panel {
                 margin-top: 0;
             }
-            /* 保持内部滚动，父级不再限制高度 */
             .questions-panel,
             .answer-panel {
                 display: flex;
@@ -447,7 +453,6 @@
                 flex: 1;
                 overflow-y: auto;
             }
-            /* 保证pdf在移动端可视 */
             .pdf-embed {
                 height: 50vh;
                 min-height: 300px;
@@ -456,44 +461,34 @@
     </style>
 </head>
 <body>
-    <!-- Token输入页面容器 -->
-    <div class="ticket-container" id="ticketContainer">
-        <h2 class="ticket-title">测试作答</h2>
+    <div class="token-container" id="tokenContainer">
+        <h2 class="token-title">测验作答</h2>
         <div id="quizStatusMessage" class="quiz-status-message info">正在获取测试数据</div>
         <div id="tokenInputArea" style="display: none;">
-            <div class="ticket-input">
-                <label for="ticketInput">访问令牌：</label>
-                <input type="text" id="ticketInput" placeholder="请输入访问令牌">
+            <div class="token-input">
+                <label for="tokenInput">访问令牌：</label>
+                <input type="text" id="tokenInput" placeholder="请输入访问令牌">
             </div>
-            <button class="ticket-btn" id="ticketBtn">验证</button>
+            <button class="token-btn" id="tokenBtn">验证</button>
         </div>
     </div>
     
-    <!-- 加载中提示 -->
     <div class="loading-container" id="loadingContainer" style="display: none;">
         <div class="loading-spinner"></div>
         <p>正在加载试题</p>
     </div>
     
-    <!-- 主页面容器 -->
     <div class="main-container" id="mainContainer">
-        <!-- 左侧题目区域 -->
         <div class="questions-panel">
             <div class="questions-container" id="questionsContainer">
-                <div class="question-content" id="questionContent">
-                    <!-- 试题内容将通过JavaScript动态渲染 -->
-                </div>
+                <div class="question-content" id="questionContent"></div>
             </div>
         </div>
-        
-        <!-- 右侧答题区域 -->
         <div class="answer-panel">
             <div class="answers-container" id="answersContainer">
                 <h2 class="panel-title">请在此区域作答</h2>
-                <!-- 答题项将通过JavaScript动态生成 -->
+                <div id="autoSaveStatus" class="auto-save-status"></div>
                 <div id="answerItemsContainer"></div>
-                
-                <!-- 提交按钮区域 -->
                 <div class="submit-area">
                     <button class="submit-btn" id="submitBtn" disabled>提交</button>
                 </div>
@@ -502,43 +497,62 @@
     </div>
 
     <script>
-        // 全局变量 (全面采用 quiz / token 命名)
+        // 全局变量
         let quizId = '';
         let tokenValue = '';
-        let quizConfig = null;          // 存储quiz配置 { paper, allow_resubmit, deadline }
-        let paperConfig = null;         // 存储paper配置 { id, content, type, answer }
-        let answerSheet = [];            // 答题卡结构 (来自 paper.answer)
-        let userAnswers = [];            // 用户填写的答案
-        let paperContentUrl = '';        // 试卷内容URL
-        let paperType = '';              // markdown / pdf / 其他
+        let quizConfig = null;
+        let answerSheet = [];
+        let userAnswers = [];
+        let paperContentUrl = '';
+        let paperMimeType = '';
         let allowResubmit = false;
+        let autoSaveInterval = null;
         
-        // DOM元素
-        const ticketContainer = document.getElementById('ticketContainer');
+        // DOM 元素
+        const tokenContainer = document.getElementById('tokenContainer');
         const loadingContainer = document.getElementById('loadingContainer');
         const mainContainer = document.getElementById('mainContainer');
-        const ticketInput = document.getElementById('ticketInput');
-        const ticketBtn = document.getElementById('ticketBtn');
+        const tokenInput = document.getElementById('tokenInput');
+        const tokenBtn = document.getElementById('tokenBtn');
         const questionContent = document.getElementById('questionContent');
         const answerItemsContainer = document.getElementById('answerItemsContainer');
         const submitBtn = document.getElementById('submitBtn');
         const quizStatusMessageDiv = document.getElementById('quizStatusMessage');
         const tokenInputArea = document.getElementById('tokenInputArea');
+        const autoSaveStatusDiv = document.getElementById('autoSaveStatus');
         
-        // 辅助函数：显示通知
+        // 通用通知函数
         function showNotification(message, type) {
-            const existingNotification = document.querySelector('.notification');
-            if (existingNotification) existingNotification.remove();
+            const existing = document.querySelector('.notification');
+            if (existing) existing.remove();
             const notification = document.createElement('div');
             notification.className = `notification ${type}`;
             notification.textContent = message;
             document.body.appendChild(notification);
-            setTimeout(() => {
-                if (notification.parentNode) notification.parentNode.removeChild(notification);
-            }, 3000);
+            setTimeout(() => notification.remove(), 3000);
         }
         
-        // 渲染数学公式 (对指定容器)
+        // 更新自动保存状态显示（失败时显示红色时间戳，成功时清除）
+        function updateAutoSaveStatus(success) {
+            if (!autoSaveStatusDiv) return;
+            if (success) {
+                autoSaveStatusDiv.textContent = '';
+                autoSaveStatusDiv.style.display = 'none';
+            } else {
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = String(now.getMonth() + 1).padStart(2, '0');
+                const day = String(now.getDate()).padStart(2, '0');
+                const hours = String(now.getHours()).padStart(2, '0');
+                const minutes = String(now.getMinutes()).padStart(2, '0');
+                const seconds = String(now.getSeconds()).padStart(2, '0');
+                const timeStr = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+                autoSaveStatusDiv.textContent = `${timeStr} 自动保存失败`;
+                autoSaveStatusDiv.style.display = 'block';
+            }
+        }
+        
+        // 渲染数学公式
         function renderMath(element) {
             if (typeof renderMathInElement !== 'undefined') {
                 renderMathInElement(element, {
@@ -553,147 +567,183 @@
             }
         }
         
-        // 第一步：获取Quiz配置，检查截止，显示/隐藏Token输入区域
+        // 严格校验 quiz 配置
+        function validateQuizConfig(data) {
+            if (!data.hasOwnProperty('paper') || typeof data.paper !== 'string' || data.paper.trim() === '') return false;
+            if (!data.hasOwnProperty('allow_resubmit') || typeof data.allow_resubmit !== 'boolean') return false;
+            if (!data.hasOwnProperty('deadline')) return false;
+            if (data.deadline !== null && data.deadline !== undefined) {
+                const deadlineNum = Number(data.deadline);
+                if (isNaN(deadlineNum) || !Number.isInteger(deadlineNum)) return false;
+            }
+            return true;
+        }
+        
+        // 获取 Quiz 配置
         async function fetchQuizConfig() {
             const urlParams = new URLSearchParams(window.location.search);
             quizId = urlParams.get('quiz');
             if (!quizId) {
                 quizStatusMessageDiv.className = 'quiz-status-message';
-                quizStatusMessageDiv.textContent = '未选择测试';
+                quizStatusMessageDiv.textContent = '未指定测验';
                 tokenInputArea.style.display = 'none';
-                ticketBtn.disabled = true;
+                tokenBtn.disabled = true;
                 return false;
             }
-            
             try {
                 const response = await fetch(`/quiz/${quizId}`);
                 if (response.status === 404) {
-                    quizStatusMessageDiv.className = 'quiz-status-message';
                     quizStatusMessageDiv.textContent = '测验不存在';
                     tokenInputArea.style.display = 'none';
-                    ticketBtn.disabled = true;
+                    tokenBtn.disabled = true;
                     return false;
                 } else if (response.status === 500) {
-                    quizStatusMessageDiv.className = 'quiz-status-message';
                     quizStatusMessageDiv.textContent = '服务器异常';
                     tokenInputArea.style.display = 'none';
-                    ticketBtn.disabled = true;
+                    tokenBtn.disabled = true;
                     return false;
                 } else if (!response.ok) {
-                    quizStatusMessageDiv.className = 'quiz-status-message';
-                    quizStatusMessageDiv.textContent = '数据异常';
+                    quizStatusMessageDiv.textContent = '请求测验数据失败';
                     tokenInputArea.style.display = 'none';
-                    ticketBtn.disabled = true;
+                    tokenBtn.disabled = true;
                     return false;
                 }
-                
                 const data = await response.json();
+                if (!validateQuizConfig(data)) {
+                    quizStatusMessageDiv.textContent = '测验数据异常';
+                    tokenInputArea.style.display = 'none';
+                    tokenBtn.disabled = true;
+                    return false;
+                }
                 quizConfig = {
                     paper: data.paper,
                     allow_resubmit: data.allow_resubmit,
-                    deadline: data.deadline  // 时间戳(ms) 或 null
+                    deadline: data.deadline
                 };
                 allowResubmit = data.allow_resubmit;
                 
-                // 截止判断 (deadline 为毫秒时间戳)
                 if (quizConfig.deadline !== null && quizConfig.deadline !== undefined) {
                     const deadlineMs = parseInt(quizConfig.deadline);
                     if (!isNaN(deadlineMs) && Date.now() > deadlineMs) {
-                        quizStatusMessageDiv.className = 'quiz-status-message';
-                        quizStatusMessageDiv.textContent = '测试已截止';
+                        quizStatusMessageDiv.textContent = '测验已截止';
                         tokenInputArea.style.display = 'none';
-                        ticketBtn.disabled = true;
+                        tokenBtn.disabled = true;
                         return false;
                     }
                 }
-                // 有效且未截止，显示Token输入区域，隐藏灰色提示框
                 quizStatusMessageDiv.style.display = 'none';
                 tokenInputArea.style.display = 'block';
-                ticketBtn.disabled = false;
+                tokenBtn.disabled = false;
                 return true;
             } catch (err) {
-                console.error(err);
-                quizStatusMessageDiv.className = 'quiz-status-message';
-                quizStatusMessageDiv.textContent = '数据异常';
+                console.error('Fetch quiz config error:', err);
+                quizStatusMessageDiv.textContent = '测验数据异常';
                 tokenInputArea.style.display = 'none';
-                ticketBtn.disabled = true;
+                tokenBtn.disabled = true;
                 return false;
             }
         }
         
-        // Token验证
-        async function verifyToken(token) {
+        // 统一处理 POST 请求（验证 / 提交）
+        async function postRequest(url, payload, operationName, showSuccessNotification = true) {
             try {
-                const response = await fetch('/token', {
+                const response = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ quiz: quizId, token: token })
+                    body: JSON.stringify(payload)
                 });
-                const result = await response.json();
-                if (result.code === 0) return true;
-                else if (result.code === 1) {
-                    showNotification('访问令牌无效', 'error');
-                    return false;
-                } else {
-                    showNotification('数据异常', 'error');
-                    return false;
+                if (response.status === 500) {
+                    showNotification(`${operationName}失败：服务器异常`, 'error');
+                    return { success: false, code: -1 };
                 }
+                if (!response.ok) {
+                    showNotification(`${operationName}失败：请求异常`, 'error');
+                    return { success: false, code: -1 };
+                }
+                const result = await response.json();
+                const code = result.code;
+                let errorMsg = '';
+                if (code === 0) {
+                    if (showSuccessNotification) {
+                        showNotification(`${operationName}成功`, 'success');
+                    }
+                    return { success: true, code: 0 };
+                } else if (code === 1) {
+                    errorMsg = operationName === '验证' ? 'Token无效' : '不允许重复提交';
+                } else if (code === 2) {
+                    errorMsg = '已截止';
+                } else if (code === 3 || code === 4) {
+                    errorMsg = '请求数据异常';
+                } else {
+                    errorMsg = '请求异常';
+                }
+                showNotification(`${operationName}失败：${errorMsg}`, 'error');
+                return { success: false, code: code };
             } catch (err) {
-                showNotification(`网络错误: ${err.message}`, 'error');
-                return false;
+                console.error('POST request error:', err);
+                showNotification(`${operationName}失败：${err.message}`, 'error');
+                return { success: false, code: -1 };
             }
         }
         
-        // 获取Paper配置 (包含answer结构和content URL)
+        // Token 验证
+        async function verifyToken(token) {
+            const result = await postRequest('/token', { quiz: quizId, token: token }, '验证', false);
+            return result.success;
+        }
+        
+        // 获取 Paper 配置
         async function fetchPaperConfig(paperId) {
             try {
                 const response = await fetch(`/paper/${paperId}`);
-                if (response.status === 500) {
-                    showNotification('服务器异常', 'error');
-                    return null;
-                } else if (!response.ok) {
-                    showNotification('试卷数据异常', 'error');
-                    return null;
+                if (response.status === 500) throw new Error('Server error (500)');
+                if (!response.ok) {
+                    if (response.status === 404) throw new Error('Paper data error: 404');
+                    throw new Error(`Paper data error: HTTP ${response.status}`);
                 }
                 const data = await response.json();
+                if (!data.hasOwnProperty('content') || typeof data.content !== 'string' || data.content.trim() === '')
+                    throw new Error('Paper data error: missing content field');
+                if (!data.hasOwnProperty('mime_type') || !['text/markdown', 'application/pdf'].includes(data.mime_type))
+                    throw new Error('Paper data error: missing or unsupported mime_type');
+                if (!data.hasOwnProperty('answer') || !Array.isArray(data.answer))
+                    throw new Error('Paper data error: missing or invalid answer field');
+                for (let i = 0; i < data.answer.length; i++) {
+                    const item = data.answer[i];
+                    if (!item.type || !['single_selection', 'multiple_selection', 'single_line', 'multiple_line'].includes(item.type))
+                        throw new Error(`Paper data error: invalid type for question ${i+1}`);
+                    if (typeof item.prompt !== 'string')
+                        throw new Error(`Paper data error: missing prompt for question ${i+1}`);
+                    if ((item.type === 'single_selection' || item.type === 'multiple_selection') && (!Array.isArray(item.option) || item.option.length === 0))
+                        throw new Error(`Paper data error: missing options for question ${i+1}`);
+                }
                 return data;
             } catch (err) {
-                showNotification(`网络错误: ${err.message}`, 'error');
-                return null;
+                if (err.message.startsWith('Paper data error')) throw err;
+                else throw new Error(`Request error: ${err.message}`);
             }
         }
         
-        // 获取试卷实际内容 (根据content_url和type)
-        async function fetchPaperContent(url, type) {
-            if (type === 'markdown') {
-                try {
-                    const resp = await fetch(url);
-                    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-                    return await resp.text();
-                } catch (err) {
-                    showNotification('加载试卷内容失败', 'error');
-                    return null;
-                }
-            } else if (type === 'pdf') {
-                // PDF 直接返回URL即可，不需要fetch文本
+        // 获取试卷内容
+        async function fetchPaperContent(url, mimeType) {
+            if (mimeType === 'text/markdown') {
+                const resp = await fetch(url);
+                if (!resp.ok) throw new Error(`Failed to load paper content: HTTP ${resp.status}`);
+                return await resp.text();
+            } else if (mimeType === 'application/pdf') {
                 return url;
             } else {
-                showNotification(`不支持的试卷格式: ${type}`, 'error');
-                return null;
+                throw new Error(`Unsupported paper format: ${mimeType}`);
             }
         }
         
-        // 渲染左侧试卷内容 (markdown渲染或PDF嵌入)
-        function renderPaperContent(contentData, type) {
+        // 渲染试卷内容（图片已通过 CSS 响应式缩放，无需额外 JS 处理）
+        function renderPaperContent(contentData, mimeType) {
             questionContent.innerHTML = '';
-            if (type === 'markdown' && typeof contentData === 'string') {
-                if (typeof marked !== 'undefined') {
-                    questionContent.innerHTML = marked.parse(contentData);
-                } else {
-                    questionContent.innerHTML = `<pre>${contentData}</pre>`;
-                }
+            if (mimeType === 'text/markdown' && typeof contentData === 'string') {
+                questionContent.innerHTML = typeof marked !== 'undefined' ? marked.parse(contentData) : `<pre>${contentData}</pre>`;
                 renderMath(questionContent);
-            } else if (type === 'pdf' && typeof contentData === 'string') {
+            } else if (mimeType === 'application/pdf' && typeof contentData === 'string') {
                 const iframe = document.createElement('iframe');
                 iframe.src = contentData;
                 iframe.className = 'pdf-embed';
@@ -701,322 +751,327 @@
                 questionContent.appendChild(iframe);
             } else {
                 questionContent.innerHTML = '<div class="unsupported-format">当前试卷格式不支持预览</div>';
+                throw new Error('Render failed: unsupported paper format');
             }
         }
         
-        // 渲染答题卡 — 适配 option 字段（原 options 更名为 option）
+        // 从 localStorage 恢复答案
+        function tryRestoreAnswers() {
+            if (!quizId || !tokenValue) return false;
+            const storageKey = `quiz_auto_save_${quizId}_${tokenValue}`;
+            const saved = localStorage.getItem(storageKey);
+            if (!saved) return false;
+            try {
+                const data = JSON.parse(saved);
+                if (data.quizId === quizId && data.token === tokenValue && Array.isArray(data.answers) && data.answers.length === answerSheet.length) {
+                    userAnswers = data.answers.slice();
+                    for (let i = 0; i < answerSheet.length; i++) {
+                        const answer = userAnswers[i];
+                        const itemType = answerSheet[i].type;
+                        const container = document.querySelector(`.answer-item[data-question-index="${i}"]`);
+                        if (!container) continue;
+                        if (itemType === 'single_selection' && answer !== null && answer !== undefined) {
+                            const radio = container.querySelector(`input[name="question_${i}"][value="${answer}"]`);
+                            if (radio) radio.checked = true;
+                        } else if (itemType === 'multiple_selection' && Array.isArray(answer)) {
+                            answer.forEach(optIdx => {
+                                const checkbox = container.querySelector(`input[name="question_${i}"][value="${optIdx}"]`);
+                                if (checkbox) checkbox.checked = true;
+                            });
+                        } else if ((itemType === 'single_line' || itemType === 'multiple_line') && typeof answer === 'string') {
+                            const input = container.querySelector(itemType === 'single_line' ? '.text-input' : '.textarea-input');
+                            if (input) {
+                                input.value = answer;
+                                input.dispatchEvent(new Event('input', { bubbles: true }));
+                            }
+                        }
+                    }
+                    // 清除之前的保存失败提示（恢复成功说明草稿可用）
+                    updateAutoSaveStatus(true);
+                    return true;
+                }
+            } catch (e) {
+                console.warn('Failed to restore answers:', e);
+            }
+            return false;
+        }
+        
+        // 自动保存答案（不再弹窗成功，失败时更新红色状态）
+        function autoSaveAnswers() {
+            if (!quizId || !tokenValue) return;
+            const storageKey = `quiz_auto_save_${quizId}_${tokenValue}`;
+            const saveData = { quizId, token: tokenValue, answers: userAnswers, timestamp: Date.now() };
+            try {
+                localStorage.setItem(storageKey, JSON.stringify(saveData));
+                // 保存成功，清除失败提示
+                updateAutoSaveStatus(true);
+            } catch (e) {
+                console.error('Auto-save failed:', e);
+                // 保存失败，显示红色时间戳
+                updateAutoSaveStatus(false);
+            }
+        }
+        
+        function stopAutoSave() {
+            if (autoSaveInterval) clearInterval(autoSaveInterval);
+            autoSaveInterval = null;
+        }
+        
+        function startAutoSave() {
+            stopAutoSave();
+            // 启动定时器前先清除旧的状态提示
+            updateAutoSaveStatus(true);
+            autoSaveInterval = setInterval(autoSaveAnswers, 30000);
+        }
+        
+        function showFatalError(message) {
+            tokenInputArea.style.display = 'none';
+            tokenBtn.disabled = true;
+            quizStatusMessageDiv.style.display = 'block';
+            quizStatusMessageDiv.className = 'quiz-status-message';
+            quizStatusMessageDiv.textContent = message;
+            loadingContainer.style.display = 'none';
+            tokenContainer.style.display = 'block';
+        }
+        
+        // 渲染答题卡
         function renderAnswerSheetFromConfig() {
             answerItemsContainer.innerHTML = '';
             userAnswers = new Array(answerSheet.length);
-            
-            answerSheet.forEach((item, index) => {
-                // 初始化答案结构
+            answerSheet.forEach((item, idx) => {
                 switch (item.type) {
-                    case 'single_selection':
-                        userAnswers[index] = null;
-                        break;
-                    case 'multiple_selection':
-                        userAnswers[index] = [];
-                        break;
+                    case 'single_selection': userAnswers[idx] = null; break;
+                    case 'multiple_selection': userAnswers[idx] = []; break;
                     case 'single_line':
-                    case 'multiple_line':
-                        userAnswers[index] = '';
-                        break;
-                    default:
-                        userAnswers[index] = null;
+                    case 'multiple_line': userAnswers[idx] = ''; break;
+                    default: userAnswers[idx] = null;
                 }
-                
                 const answerItem = document.createElement('div');
                 answerItem.className = 'answer-item';
-                answerItem.dataset.questionIndex = index;
+                answerItem.dataset.questionIndex = idx;
                 answerItem.dataset.questionType = item.type;
-                
                 const title = document.createElement('div');
                 title.className = 'answer-item-title';
                 title.textContent = item.prompt;
                 answerItem.appendChild(title);
-                
-                switch (item.type) {
-                    case 'single_selection':
-                        renderSingleSelection(answerItem, item, index);
-                        break;
-                    case 'multiple_selection':
-                        renderMultipleSelection(answerItem, item, index);
-                        break;
-                    case 'single_line':
-                        renderSingleLine(answerItem, item, index);
-                        break;
-                    case 'multiple_line':
-                        renderMultipleLine(answerItem, item, index);
-                        break;
-                    default:
-                        console.warn(`未知题目类型: ${item.type}`);
-                }
+                if (item.type === 'single_selection') renderSingleSelection(answerItem, item, idx);
+                else if (item.type === 'multiple_selection') renderMultipleSelection(answerItem, item, idx);
+                else if (item.type === 'single_line') renderSingleLine(answerItem, item, idx);
+                else if (item.type === 'multiple_line') renderMultipleLine(answerItem, item, idx);
                 answerItemsContainer.appendChild(answerItem);
             });
         }
         
-        // 单选题渲染 — 使用 item.option (新字段名)
         function renderSingleSelection(container, item, index) {
-            const optionsContainer = document.createElement('div');
-            optionsContainer.className = 'options-container';
-            const optionArray = item.option || [];   // 新API字段名为 option
-            optionArray.forEach((option, optIdx) => {
-                const optionDiv = document.createElement('div');
-                optionDiv.className = 'option';
+            const optionsDiv = document.createElement('div');
+            optionsDiv.className = 'options-container';
+            (item.option || []).forEach((opt, optIdx) => {
+                const optDiv = document.createElement('div');
+                optDiv.className = 'option';
                 const radio = document.createElement('input');
                 radio.type = 'radio';
                 radio.name = `question_${index}`;
                 radio.id = `question_${index}_option_${optIdx}`;
                 radio.value = optIdx;
-                radio.addEventListener('change', function() {
-                    if (this.checked) userAnswers[index] = optIdx;
-                });
+                radio.addEventListener('change', () => { if (radio.checked) userAnswers[index] = optIdx; });
                 const label = document.createElement('label');
-                label.htmlFor = `question_${index}_option_${optIdx}`;
-                label.textContent = option;
-                optionDiv.appendChild(radio);
-                optionDiv.appendChild(label);
-                optionsContainer.appendChild(optionDiv);
+                label.htmlFor = radio.id;
+                label.textContent = opt;
+                optDiv.appendChild(radio);
+                optDiv.appendChild(label);
+                optionsDiv.appendChild(optDiv);
             });
-            container.appendChild(optionsContainer);
+            container.appendChild(optionsDiv);
         }
         
-        // 多选题渲染 — 使用 item.option (新字段名)
         function renderMultipleSelection(container, item, index) {
-            const optionsContainer = document.createElement('div');
-            optionsContainer.className = 'options-container';
-            const optionArray = item.option || [];
-            optionArray.forEach((option, optIdx) => {
-                const optionDiv = document.createElement('div');
-                optionDiv.className = 'option';
-                const checkbox = document.createElement('input');
-                checkbox.type = 'checkbox';
-                checkbox.name = `question_${index}`;
-                checkbox.id = `question_${index}_option_${optIdx}`;
-                checkbox.value = optIdx;
-                checkbox.addEventListener('change', function() {
-                    if (this.checked) {
-                        userAnswers[index].push(optIdx);
-                    } else {
-                        const idx = userAnswers[index].indexOf(optIdx);
-                        if (idx > -1) userAnswers[index].splice(idx, 1);
+            const optionsDiv = document.createElement('div');
+            optionsDiv.className = 'options-container';
+            (item.option || []).forEach((opt, optIdx) => {
+                const optDiv = document.createElement('div');
+                optDiv.className = 'option';
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.name = `question_${index}`;
+                cb.id = `question_${index}_option_${optIdx}`;
+                cb.value = optIdx;
+                cb.addEventListener('change', () => {
+                    if (cb.checked) userAnswers[index].push(optIdx);
+                    else {
+                        const pos = userAnswers[index].indexOf(optIdx);
+                        if (pos > -1) userAnswers[index].splice(pos, 1);
                     }
                     userAnswers[index] = [...new Set(userAnswers[index])];
                 });
                 const label = document.createElement('label');
-                label.htmlFor = `question_${index}_option_${optIdx}`;
-                label.textContent = option;
-                optionDiv.appendChild(checkbox);
-                optionDiv.appendChild(label);
-                optionsContainer.appendChild(optionDiv);
+                label.htmlFor = cb.id;
+                label.textContent = opt;
+                optDiv.appendChild(cb);
+                optDiv.appendChild(label);
+                optionsDiv.appendChild(optDiv);
             });
-            container.appendChild(optionsContainer);
+            container.appendChild(optionsDiv);
         }
         
-        // 单行填空
         function renderSingleLine(container, item, index) {
-            const inputContainer = document.createElement('div');
-            inputContainer.className = 'single-line-container';
+            const wrapper = document.createElement('div');
+            wrapper.className = 'single-line-container';
             const inputDiv = document.createElement('div');
             inputDiv.className = 'single-line-input';
             const input = document.createElement('input');
             input.type = 'text';
             input.className = 'text-input';
             input.placeholder = '请按LaTeX格式输入';
-            input.addEventListener('input', function() {
-                userAnswers[index] = this.value;
-                updateFormulaPreview(`preview_single_${index}`, this.value, false);
+            input.addEventListener('input', () => {
+                userAnswers[index] = input.value;
+                updateFormulaPreview(`preview_single_${index}`, input.value, false);
             });
-            const previewDiv = document.createElement('div');
-            previewDiv.className = 'single-line-preview';
-            previewDiv.id = `preview_single_${index}`;
+            const preview = document.createElement('div');
+            preview.className = 'single-line-preview';
+            preview.id = `preview_single_${index}`;
             inputDiv.appendChild(input);
-            inputContainer.appendChild(inputDiv);
-            inputContainer.appendChild(previewDiv);
-            container.appendChild(inputContainer);
+            wrapper.appendChild(inputDiv);
+            wrapper.appendChild(preview);
+            container.appendChild(wrapper);
         }
         
-        // 多行填空
         function renderMultipleLine(container, item, index) {
-            const inputContainer = document.createElement('div');
-            inputContainer.className = 'multiple-line-container';
+            const wrapper = document.createElement('div');
+            wrapper.className = 'multiple-line-container';
             const inputDiv = document.createElement('div');
             inputDiv.className = 'multiple-line-input';
             const textarea = document.createElement('textarea');
             textarea.className = 'textarea-input';
             textarea.placeholder = '请按LaTeX格式输入，换行请输入\\newline';
-            textarea.addEventListener('input', function() {
-                userAnswers[index] = this.value;
-                this.style.height = 'auto';
-                this.style.height = Math.max(80, this.scrollHeight) + 'px';
-                updateFormulaPreview(`preview_multiple_${index}`, this.value, true);
+            textarea.addEventListener('input', () => {
+                userAnswers[index] = textarea.value;
+                textarea.style.height = 'auto';
+                textarea.style.height = Math.max(80, textarea.scrollHeight) + 'px';
+                updateFormulaPreview(`preview_multiple_${index}`, textarea.value, true);
             });
-            const previewDiv = document.createElement('div');
-            previewDiv.className = 'multiple-line-preview';
-            previewDiv.id = `preview_multiple_${index}`;
+            const preview = document.createElement('div');
+            preview.className = 'multiple-line-preview';
+            preview.id = `preview_multiple_${index}`;
             setTimeout(() => { textarea.style.height = '80px'; }, 10);
             inputDiv.appendChild(textarea);
-            inputContainer.appendChild(inputDiv);
-            inputContainer.appendChild(previewDiv);
-            container.appendChild(inputContainer);
+            wrapper.appendChild(inputDiv);
+            wrapper.appendChild(preview);
+            container.appendChild(wrapper);
         }
         
         function updateFormulaPreview(previewId, latexCode, displayMode) {
-            const previewElement = document.getElementById(previewId);
-            if (!previewElement) return;
-            previewElement.innerHTML = '';
+            const preview = document.getElementById(previewId);
+            if (!preview) return;
+            preview.innerHTML = '';
             if (!latexCode) return;
             try {
-                if (typeof katex !== 'undefined') {
-                    katex.render(latexCode, previewElement, { throwOnError: false, displayMode: displayMode });
-                } else {
-                    previewElement.innerHTML = `<span style="color:#f44336;">LaTeX库未加载</span>`;
-                }
-            } catch (error) {
-                previewElement.innerHTML = `<span style="color:#f44336;">LaTeX解析错误</span>`;
+                if (typeof katex !== 'undefined')
+                    katex.render(latexCode, preview, { throwOnError: false, displayMode });
+                else
+                    preview.innerHTML = '<span style="color:#f44336;">LaTeX library not loaded</span>';
+            } catch (e) {
+                preview.innerHTML = '<span style="color:#f44336;">LaTeX parse error</span>';
             }
         }
         
-        // 提交答卷 (适配新API)
+        // 提交答卷
         async function submitAnswers() {
             submitBtn.disabled = true;
             submitBtn.textContent = '正在提交';
-            try {
-                const payload = {
-                    quiz: quizId,
-                    token: tokenValue,
-                    answer: userAnswers
-                };
-                const response = await fetch('/submit', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                const result = await response.json();
-                const code = result.code;
-                if (code === 0) {
-                    showNotification('提交成功', 'success');
-                    submitBtn.textContent = '提交';
-                    submitBtn.disabled = false;
-                    // 若不允许重复提交，成功后禁用提交按钮
-                    if (!allowResubmit) {
-                        submitBtn.disabled = true;
-                        submitBtn.textContent = '已提交';
-                    }
-                } else if (code === 1) {
-                    showNotification('您已经提交过，无法再次提交', 'error');
+            const result = await postRequest('/submit', { quiz: quizId, token: tokenValue, answer: userAnswers }, '提交', true);
+            if (result.success) {
+                if (!allowResubmit) {
                     submitBtn.disabled = true;
                     submitBtn.textContent = '已提交';
-                } else if (code === 2) {
-                    showNotification('提交失败：测验已截止', 'error');
-                    submitBtn.disabled = true;
-                    submitBtn.textContent = '已截止';
                 } else {
-                    showNotification('提交失败：数据异常', 'error');
                     submitBtn.disabled = false;
                     submitBtn.textContent = '提交';
                 }
-            } catch (err) {
-                showNotification(`网络错误: ${err.message}`, 'error');
+                // 提交成功后清除本地存储的草稿以及失败提示
+                localStorage.removeItem(`quiz_auto_save_${quizId}_${tokenValue}`);
+                updateAutoSaveStatus(true);
+                stopAutoSave();
+            } else {
                 submitBtn.disabled = false;
                 submitBtn.textContent = '提交';
             }
         }
         
-        // 完整流程：验证Token -> 加载Paper配置 -> 获取试卷内容 -> 渲染
+        // 验证 Token 后的主流程
         async function onTokenVerified() {
-            // 显示加载，隐藏Token界面
-            ticketContainer.style.display = 'none';
+            tokenContainer.style.display = 'none';
             loadingContainer.style.display = 'block';
-            
             try {
                 const paperId = quizConfig.paper;
-                if (!paperId) throw new Error('缺少paper信息');
-                // 获取paper配置 (包含answer与content URL)
+                if (!paperId) throw new Error('Missing paper info');
                 const paperConf = await fetchPaperConfig(paperId);
-                if (!paperConf) {
-                    throw new Error('获取试卷配置失败');
-                }
-                paperConfig = paperConf;
                 answerSheet = paperConf.answer || [];
                 paperContentUrl = paperConf.content;
-                paperType = paperConf.type;
-                
-                if (!paperContentUrl) throw new Error('试卷内容URL缺失');
-                // 获取实际试卷内容
+                paperMimeType = paperConf.mime_type;
+                if (!paperContentUrl) throw new Error('Missing paper content URL');
                 let contentData = null;
-                if (paperType === 'markdown') {
-                    contentData = await fetchPaperContent(paperContentUrl, 'markdown');
-                    if (contentData === null) throw new Error('加载markdown内容失败');
-                } else if (paperType === 'pdf') {
+                if (paperMimeType === 'text/markdown')
+                    contentData = await fetchPaperContent(paperContentUrl, 'text/markdown');
+                else if (paperMimeType === 'application/pdf')
                     contentData = paperContentUrl;
-                } else {
-                    throw new Error(`不支持的试卷类型: ${paperType}`);
-                }
-                // 渲染左侧试卷
-                renderPaperContent(contentData, paperType);
-                // 渲染右侧答题卡
+                else
+                    throw new Error(`Unsupported paper type: ${paperMimeType}`);
+                renderPaperContent(contentData, paperMimeType);
                 renderAnswerSheetFromConfig();
-                // 启用提交按钮
+                tryRestoreAnswers();
                 submitBtn.disabled = false;
-                // 切换到主界面
+                startAutoSave();
                 loadingContainer.style.display = 'none';
                 mainContainer.style.display = 'flex';
             } catch (err) {
-                console.error(err);
-                showNotification(err.message || '加载试题失败，请重试', 'error');
-                // 出错后返回Token输入页面，但不清空用户输入的Token（保留原内容）
-                loadingContainer.style.display = 'none';
-                ticketContainer.style.display = 'block';
-                ticketBtn.disabled = false;
-                ticketBtn.textContent = '验证';
-                // 保留 tokenValue 不变，不清空输入框
-                // 恢复显示状态提示框（隐藏输入区域，展示错误）
-                quizStatusMessageDiv.style.display = 'block';
-                quizStatusMessageDiv.className = 'quiz-status-message';
-                quizStatusMessageDiv.textContent = '加载失败，请重试或联系管理员';
-                tokenInputArea.style.display = 'none';
+                console.error('Paper loading error:', err);
+                const msg = err.message || '';
+                if (msg.includes('Server error') || msg.includes('Failed to fetch') || msg.includes('Request error') || msg.includes('Failed to load paper content')) {
+                    showNotification('试题加载失败：请求异常', 'error');
+                    loadingContainer.style.display = 'none';
+                    tokenContainer.style.display = 'block';
+                    tokenBtn.disabled = false;
+                    tokenBtn.textContent = '验证';
+                    if (quizStatusMessageDiv.style.display === 'none') {
+                        quizStatusMessageDiv.style.display = 'block';
+                        quizStatusMessageDiv.className = 'quiz-status-message info';
+                        quizStatusMessageDiv.textContent = '访问令牌验证通过但获取试题数据的请求异常，可重新尝试验证';
+                    }
+                    tokenInputArea.style.display = 'block';
+                } else {
+                    showFatalError('试题数据异常');
+                    showNotification('试题加载失败：试题数据异常', 'error');
+                }
             }
         }
         
-        // 提交Token验证
         async function submitToken() {
-            const inputToken = ticketInput.value.trim();
+            const inputToken = tokenInput.value.trim();
             if (!inputToken) {
-                showNotification('请输入身份令牌', 'error');
+                showNotification('请输入访问令牌', 'error');
                 return;
             }
-            ticketBtn.disabled = true;
-            ticketBtn.textContent = '正在验证';
+            tokenBtn.disabled = true;
+            tokenBtn.textContent = '正在验证';
             const isValid = await verifyToken(inputToken);
             if (isValid) {
                 tokenValue = inputToken;
                 await onTokenVerified();
             } else {
-                ticketBtn.disabled = false;
-                ticketBtn.textContent = '验证';
-                // 不清空输入框内容，保留用户输入
+                tokenBtn.disabled = false;
+                tokenBtn.textContent = '验证';
             }
         }
         
-        // 页面入口
         document.addEventListener('DOMContentLoaded', async () => {
-            // 先获取Quiz配置，页面初始显示灰色提示框“正在获取测试数据”，不显示输入框
             const isQuizValid = await fetchQuizConfig();
             if (!isQuizValid) {
-                // 已经显示了错误/截止消息，且 tokenInputArea 已隐藏，按钮已禁用，无需额外操作
-                ticketBtn.disabled = true;
+                tokenBtn.disabled = true;
                 return;
             }
-            // 绑定Token验证事件
-            ticketBtn.addEventListener('click', submitToken);
-            ticketInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') submitToken();
-            });
-            // 提交答卷事件
+            tokenBtn.addEventListener('click', submitToken);
+            tokenInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') submitToken(); });
             submitBtn.addEventListener('click', submitAnswers);
-            // 初始化KaTeX渲染（全局）
             if (typeof renderMathInElement !== 'undefined') {
                 renderMathInElement(document.body, {
                     delimiters: [
@@ -1028,6 +1083,9 @@
                     throwOnError: false
                 });
             }
+            window.addEventListener('beforeunload', () => {
+                if (mainContainer.style.display === 'flex') autoSaveAnswers();
+            });
         });
     </script>
 </body>
