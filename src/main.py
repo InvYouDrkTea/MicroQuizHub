@@ -30,6 +30,13 @@ def page(filename):
     except TemplateNotFound:
         return abort(404, "Page not found")
 
+@app.route("/icon/<path:filename>")
+def icon(filename):
+    try:
+        return send_file(os.path.join("icon/", filename))
+    except FileNotFoundError:
+        return abort(404, "Icon not found")
+
 @app.route("/quiz/<quiz_id>")
 def quiz(quiz_id):
     quiz = res.get_quiz(quiz_id)
