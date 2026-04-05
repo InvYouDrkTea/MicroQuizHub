@@ -7,9 +7,6 @@ paper_cache = TTLCache(maxsize=8, ttl=30)
 group_cache = TTLCache(maxsize=8, ttl=30)
 
 class Resource:
-    def __init__(self):
-        pass
-    
     def load_json(self, path):
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
@@ -57,8 +54,8 @@ class Resource:
                 continue
         return None
     
-    def get_answer(self, survey_id): # This function is a development function, please do not use in production.
-        path = self.get_survey(survey_id)[0]
+    def get_answer(self, quiz_id): # This function is a development function, please do not use in production.
+        path = self.get_quiz(quiz_id)[0]
         if path == None:
             raise FileNotFoundError("Answer file not found")
         try:
@@ -67,8 +64,8 @@ class Resource:
             data = None
         return data
     
-    def save_answer(self, survey_id, data): # This function is a development function, please do not use in production.
-        path = self.get_survey(survey_id)[0]
+    def save_answer(self, quiz_id, data): # This function is a development function, please do not use in production.
+        path = self.get_quiz(quiz_id)[0]
         if path == None:
             return False
         self.save_json(os.path.join(path, "answer.json"), data)

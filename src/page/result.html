@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>测验结果 - MicroQuizHub</title>
+    <link rel="icon" type="image/png" href="/asset/icon.png">
+    <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/KaTeX/0.16.9/katex.min.css">
+    <script defer src="https://cdn.bootcdn.net/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+    <script defer src="https://cdn.bootcdn.net/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/marked/4.3.0/marked.min.js"></script>
+    <link rel="stylesheet" href="/asset/style.css">
+</head>
+<body>
+    <div class="token-container" id="tokenContainer">
+        <h2 class="token-title">测验结果</h2>
+        <div id="quizStatusMessage" class="quiz-status-message info">正在校验测验数据</div>
+        <div id="tokenInputArea" style="display: none;">
+            <div class="token-input">
+                <label for="tokenInput">访问令牌：</label>
+                <input type="text" id="tokenInput" placeholder="请输入访问令牌">
+            </div>
+            <button class="token-btn" id="tokenBtn">查询结果</button>
+        </div>
+    </div>
+    <div class="loading-container" id="loadingContainer" style="display: none;">
+        <div class="loading-spinner"></div>
+        <p>正在加载试卷与结果</p>
+    </div>
+    <div class="main-container" id="mainContainer">
+        <div class="questions-panel">
+            <div class="questions-container" id="questionsContainer">
+                <div class="question-content" id="questionContent"></div>
+            </div>
+        </div>
+        <div class="answer-panel">
+            <div class="answers-container" id="answersContainer">
+                <h2 class="panel-title" id="resultTitle">请在此区域查看结果</h2>
+                <div id="answerItemsContainer"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let quizId = '';
+        let tokenValue = '';
+        let quizConfig = null;
+        let answerSheet = [];
+        let paperContentUrl = '';
+        let paperMimeType = '';
+        
+        const tokenContainer = document.getElementById('tokenContainer');
+        const loadingContainer = document.getElementById('loadingContainer');
+        const mainContainer = document.getElementById('mainContainer');
+        const tokenInput = document.getElementById('tokenInput');
+        const tokenBtn = document.getElementById('tokenBtn');
+        const questionContent = document.getElementById('questionContent');
+        const answerItemsContainer = document.getElementById('answerItemsContainer');
+        const resultTitle = document.getElementById('resultTitle');
+        const quizStatusMessageDiv = document.getElementById('quizStatusMessage');
+        const tokenInputArea = document.getElementById('tokenInputArea');
+        
+        function showNotification(message, type) {
+            const existing = document.querySelector('.notification');
+            if (existing) existing.remove();
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            setTimeout(() => notification.remove(), 3000);
+        }
+        
+        function renderMath(element) {
+            if (typeof renderMathInElement !== 'undefined') {
+                renderMathInElement(element, {
+                    delimiters: [
+                        {left: "$$", right: "$$", display: true},
+                        {left: "$", right: "$", display: false},
+                        {left: "\\(", right: "\\)", display: false},
+                        {left: "\\[", right: "\\]", display: true}
+                    ],
+                    throwOnError: false
+                });
+            }
+        }
+        
+        function validateQuizConfig(data) {
+            if (!data.hasOwnProperty('paper') || typeof data.paper !== 'string' || data.paper.trim() === '') return false;
+            if (!data.hasOwnProperty('allow_resubmit') || typeof data.allow_resubmit !== 'boolean') return false;
+            if (!data.hasOwnProperty('deadline')) return false;
+            if (data.deadline !== null && data.deadline !== undefined) {
+                const deadlineNum = Number(data.deadline);
+                if (isNaN(deadlineNum) || !Number.isInteger(deadlineNum)) return false;
+            }
+            return true;
+        }
+        
+        async function fetchQuizConfig() {
+            const urlParams = new URLSearchParams(window.location.search);
+            quizId = urlParams.get('quiz');
+            if (!quizId) {
+                quizStatusMessageDiv.className = 'quiz-status-message';
+                quizStatusMessageDiv.textContent = '未选择测验';
+                tokenInputArea.style.display = 'none';
+                tokenBtn.disabled = true;
+                return false;
+            }
+            try {
+                const response = await fetch(`/quiz/${quizId}`);
+                if (response.status === 404) {
+                    quizStatusMessageDiv.className = 'quiz-status-message';
+                    quizStatusMessageDiv.textContent = '测验不存在';
+                    tokenInputArea.style.display = 'none';
+                    tokenBtn.disabled = true;
+                    return false;
+                } else if (response.status === 500) {
+                    quizStatusMessageDiv.className = 'quiz-status-message';
+                    quizStatusMessageDiv.textContent = '服务器异常';
+                    tokenInputArea.style.display = 'none';
+                    tokenBtn.disabled = true;
+                    return false;
+                } else if (!response.ok) {
+                    quizStatusMessageDiv.className = 'quiz-status-message';
+                    quizStatusMessageDiv.textContent = '测验数据获取失败';
+                    tokenInputArea.style.display = 'none';
+                    tokenBtn.disabled = true;
+                    return false;
+                }
+                const data = await response.json();
+                if (!validateQuizConfig(data)) {
+                    quizStatusMessageDiv.className = 'quiz-status-message';
+                    quizStatusMessageDiv.textContent = '测验数据异常';
+                    tokenInputArea.style.display = 'none';
+                    tokenBtn.disabled = true;
+                    return false;
+                }
+                quizConfig = {
+                    paper: data.paper,
+                    allow_resubmit: data.allow_resubmit,
+                    deadline: data.deadline
+                };
+                quizStatusMessageDiv.style.display = 'none';
+                tokenInputArea.style.display = 'block';
+                tokenBtn.disabled = false;
+                return true;
+            } catch (err) {
+                console.error('Fetch quiz config error:', err);
+                quizStatusMessageDiv.className = 'quiz-status-message';
+                quizStatusMessageDiv.textContent = '测验数据异常';
+                tokenInputArea.style.display = 'none';
+                tokenBtn.disabled = true;
+                return false;
+            }
+        }
+        
+        // 获取结果（GET 请求，适配统一 code：0成功，1Token无效，2无结果，3已截止）
+        async function fetchResult(token) {
+            try {
+                const url = `/result/${quizId}?token=${encodeURIComponent(token)}`;
+                const response = await fetch(url);
+                if (response.status === 400) {
+                    showNotification('获取结果失败：请求异常', 'error');
+                    return { success: false, code: -1 };
+                }
+                if (response.status === 500) {
+                    showNotification('获取结果失败：服务器异常', 'error');
+                    return { success: false, code: -1 };
+                }
+                if (!response.ok) {
+                    showNotification('获取结果失败：请求异常', 'error');
+                    return { success: false, code: -1 };
+                }
+                const data = await response.json();
+                const code = data.code;
+                if (code === 0) {
+                    return { success: true, data: data };
+                } else if (code === 1) {
+                    showNotification('访问令牌无效', 'error');
+                    return { success: false, code: 1 };
+                } else if (code === 2) {
+                    showNotification('暂无作答结果', 'error');
+                    return { success: false, code: 2 };
+                } else if (code === 3) {
+                    showNotification('测验已截止，无法查看结果', 'error');
+                    return { success: false, code: 3 };
+                } else {
+                    showNotification('获取结果失败：数据异常', 'error');
+                    return { success: false, code: -1 };
+                }
+            } catch (err) {
+                console.error('Fetch result error:', err);
+                showNotification(`获取结果失败：${err.message}`, 'error');
+                return { success: false, code: -1 };
+            }
+        }
+        
+        // 获取 Paper 配置（字段名 answer → paper）
+        async function fetchPaperConfig(paperId) {
+            try {
+                const response = await fetch(`/paper/${paperId}`);
+                if (response.status === 500) throw new Error('Server error (500)');
+                if (!response.ok) {
+                    if (response.status === 404) throw new Error('Paper data error: 404');
+                    throw new Error(`Paper data error: HTTP ${response.status}`);
+                }
+                const data = await response.json();
+                if (!data.hasOwnProperty('content') || typeof data.content !== 'string' || data.content.trim() === '')
+                    throw new Error('Paper data error: missing content field');
+                if (!data.hasOwnProperty('mime_type') || !['text/markdown', 'application/pdf'].includes(data.mime_type))
+                    throw new Error('Paper data error: missing or unsupported mime_type');
+                if (!data.hasOwnProperty('paper') || !Array.isArray(data.paper))
+                    throw new Error('Paper data error: missing or invalid paper field');
+                for (let i = 0; i < data.paper.length; i++) {
+                    const item = data.paper[i];
+                    if (!item.type || !['single_selection', 'multiple_selection', 'single_line', 'multiple_line'].includes(item.type))
+                        throw new Error(`Paper data error: invalid type for question ${i+1}`);
+                    if (typeof item.prompt !== 'string')
+                        throw new Error(`Paper data error: missing prompt for question ${i+1}`);
+                    if ((item.type === 'single_selection' || item.type === 'multiple_selection') && (!Array.isArray(item.option) || item.option.length === 0))
+                        throw new Error(`Paper data error: missing options for question ${i+1}`);
+                }
+                return data;
+            } catch (err) {
+                if (err.message.startsWith('Paper data error')) throw err;
+                else throw new Error(`Request error: ${err.message}`);
+            }
+        }
+        
+        async function fetchPaperContent(url, mimeType) {
+            if (mimeType === 'text/markdown') {
+                const resp = await fetch(url);
+                if (!resp.ok) throw new Error(`Failed to load paper content: HTTP ${resp.status}`);
+                return await resp.text();
+            } else if (mimeType === 'application/pdf') {
+                return url;
+            } else {
+                throw new Error(`Unsupported paper format: ${mimeType}`);
+            }
+        }
+        
+        function renderPaperContent(contentData, mimeType) {
+            questionContent.innerHTML = '';
+            if (mimeType === 'text/markdown' && typeof contentData === 'string') {
+                questionContent.innerHTML = typeof marked !== 'undefined' ? marked.parse(contentData) : `<pre>${contentData}</pre>`;
+                renderMath(questionContent);
+            } else if (mimeType === 'application/pdf' && typeof contentData === 'string') {
+                const iframe = document.createElement('iframe');
+                iframe.src = contentData;
+                iframe.className = 'pdf-embed';
+                iframe.setAttribute('frameborder', '0');
+                questionContent.appendChild(iframe);
+            } else {
+                questionContent.innerHTML = '<div class="unsupported-format">当前试卷格式不支持预览</div>';
+                throw new Error('Render failed: unsupported paper format');
+            }
+        }
+        
+        function renderResultAnswerSheet(resultArray) {
+            answerItemsContainer.innerHTML = '';
+            let totalScore = 0;
+            for (let i = 0; i < resultArray.length; i++) {
+                const mark = resultArray[i].mark;
+                if (typeof mark === 'number' && !isNaN(mark)) totalScore += mark;
+            }
+            resultTitle.textContent = `${tokenValue}，总分：${totalScore}`;
+            answerSheet.forEach((item, idx) => {
+                const resultItem = resultArray[idx] || { answer: null, mark: 0 };
+                const userAnswer = resultItem.answer;
+                const score = (typeof resultItem.mark === 'number' && !isNaN(resultItem.mark)) ? resultItem.mark : 0;
+                const answerItem = document.createElement('div');
+                answerItem.className = 'answer-item';
+                const title = document.createElement('div');
+                title.className = 'answer-item-title';
+                title.textContent = item.prompt;
+                answerItem.appendChild(title);
+                if (item.type === 'single_selection') {
+                    const optionsDiv = document.createElement('div');
+                    optionsDiv.className = 'options-container';
+                    (item.option || []).forEach((opt, optIdx) => {
+                        const optDiv = document.createElement('div');
+                        optDiv.className = 'option';
+                        const radio = document.createElement('input');
+                        radio.type = 'radio';
+                        radio.disabled = true;
+                        if (userAnswer === optIdx) radio.checked = true;
+                        const label = document.createElement('label');
+                        label.textContent = opt;
+                        optDiv.appendChild(radio);
+                        optDiv.appendChild(label);
+                        optionsDiv.appendChild(optDiv);
+                    });
+                    answerItem.appendChild(optionsDiv);
+                } else if (item.type === 'multiple_selection') {
+                    const optionsDiv = document.createElement('div');
+                    optionsDiv.className = 'options-container';
+                    const selectedSet = new Set(userAnswer || []);
+                    (item.option || []).forEach((opt, optIdx) => {
+                        const optDiv = document.createElement('div');
+                        optDiv.className = 'option';
+                        const cb = document.createElement('input');
+                        cb.type = 'checkbox';
+                        cb.disabled = true;
+                        if (selectedSet.has(optIdx)) cb.checked = true;
+                        const label = document.createElement('label');
+                        label.textContent = opt;
+                        optDiv.appendChild(cb);
+                        optDiv.appendChild(label);
+                        optionsDiv.appendChild(optDiv);
+                    });
+                    answerItem.appendChild(optionsDiv);
+                } else if (item.type === 'single_line') {
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.className = 'text-input';
+                    input.value = (typeof userAnswer === 'string') ? userAnswer : '';
+                    input.readOnly = true;
+                    answerItem.appendChild(input);
+                    if (typeof userAnswer === 'string' && userAnswer.trim() !== '' && typeof katex !== 'undefined') {
+                        const previewDiv = document.createElement('div');
+                        previewDiv.style.marginTop = '8px';
+                        previewDiv.style.padding = '8px';
+                        previewDiv.style.border = '1px solid #eee';
+                        previewDiv.style.borderRadius = '4px';
+                        previewDiv.style.backgroundColor = '#f9f9f9';
+                        try { katex.render(userAnswer, previewDiv, { throwOnError: false, displayMode: false }); } catch(e) { previewDiv.textContent = userAnswer; }
+                        answerItem.appendChild(previewDiv);
+                    }
+                } else if (item.type === 'multiple_line') {
+                    const textarea = document.createElement('textarea');
+                    textarea.className = 'textarea-input';
+                    textarea.value = (typeof userAnswer === 'string') ? userAnswer : '';
+                    textarea.readOnly = true;
+                    answerItem.appendChild(textarea);
+                    if (typeof userAnswer === 'string' && userAnswer.trim() !== '' && typeof katex !== 'undefined') {
+                        const previewDiv = document.createElement('div');
+                        previewDiv.style.marginTop = '8px';
+                        previewDiv.style.padding = '8px';
+                        previewDiv.style.border = '1px solid #eee';
+                        previewDiv.style.borderRadius = '4px';
+                        previewDiv.style.backgroundColor = '#f9f9f9';
+                        previewDiv.style.whiteSpace = 'pre-wrap';
+                        try { katex.render(userAnswer, previewDiv, { throwOnError: false, displayMode: true }); } catch(e) { previewDiv.textContent = userAnswer; }
+                        answerItem.appendChild(previewDiv);
+                    }
+                }
+                const scoreDiv = document.createElement('div');
+                scoreDiv.className = 'question-score';
+                scoreDiv.textContent = `得分：${score}`;
+                answerItem.appendChild(scoreDiv);
+                answerItemsContainer.appendChild(answerItem);
+            });
+        }
+        
+        // 主流程（复用 quiz.html 的加载逻辑，异常仅弹窗）
+        async function onTokenVerified() {
+            tokenContainer.style.display = 'none';
+            loadingContainer.style.display = 'block';
+            try {
+                const resultResp = await fetchResult(tokenValue);
+                if (!resultResp.success) {
+                    loadingContainer.style.display = 'none';
+                    tokenContainer.style.display = 'block';
+                    tokenBtn.disabled = false;
+                    tokenBtn.textContent = '查询结果';
+                    if (quizStatusMessageDiv.style.display === 'none') {
+                        quizStatusMessageDiv.style.display = 'block';
+                        quizStatusMessageDiv.className = 'quiz-status-message info';
+                        quizStatusMessageDiv.textContent = '请输入正确的访问令牌';
+                    }
+                    tokenInputArea.style.display = 'block';
+                    return;
+                }
+                const resultData = resultResp.data;
+                const paperId = quizConfig.paper;
+                if (!paperId) throw new Error('Missing paper info');
+                const paperConf = await fetchPaperConfig(paperId);
+                answerSheet = paperConf.paper || [];
+                paperContentUrl = paperConf.content;
+                paperMimeType = paperConf.mime_type;
+                if (!paperContentUrl) throw new Error('Missing paper content URL');
+                let contentData = null;
+                if (paperMimeType === 'text/markdown')
+                    contentData = await fetchPaperContent(paperContentUrl, 'text/markdown');
+                else if (paperMimeType === 'application/pdf')
+                    contentData = paperContentUrl;
+                else
+                    throw new Error(`Unsupported paper type: ${paperMimeType}`);
+                renderPaperContent(contentData, paperMimeType);
+                renderResultAnswerSheet(resultData.result || []);
+                loadingContainer.style.display = 'none';
+                mainContainer.style.display = 'flex';
+            } catch (err) {
+                console.error('Loading error:', err);
+                showNotification('加载试卷或结果失败：' + (err.message || '未知错误'), 'error');
+                loadingContainer.style.display = 'none';
+                tokenContainer.style.display = 'block';
+                tokenBtn.disabled = false;
+                tokenBtn.textContent = '查询结果';
+                tokenInputArea.style.display = 'block';
+            }
+        }
+        
+        async function submitToken() {
+            const inputToken = tokenInput.value.trim();
+            if (!inputToken) {
+                showNotification('请输入访问令牌', 'error');
+                return;
+            }
+            tokenBtn.disabled = true;
+            tokenBtn.textContent = '正在查询';
+            tokenValue = inputToken;
+            await onTokenVerified();
+            tokenBtn.disabled = false;
+            tokenBtn.textContent = '查询结果';
+        }
+        
+        document.addEventListener('DOMContentLoaded', async () => {
+            const isQuizValid = await fetchQuizConfig();
+            if (!isQuizValid) {
+                tokenBtn.disabled = true;
+                return;
+            }
+            tokenBtn.addEventListener('click', submitToken);
+            tokenInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') submitToken(); });
+            if (typeof renderMathInElement !== 'undefined') {
+                renderMathInElement(document.body, {
+                    delimiters: [
+                        {left: "$$", right: "$$", display: true},
+                        {left: "$", right: "$", display: false},
+                        {left: "\\(", right: "\\)", display: false},
+                        {left: "\\[", right: "\\]", display: true}
+                    ],
+                    throwOnError: false
+                });
+            }
+        });
+    </script>
+</body>
+</html>

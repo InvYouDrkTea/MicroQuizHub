@@ -4,475 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
     <title>测验作答 - MicroQuizHub</title>
-	<link rel="icon" type="image/png" href="/icon/icon.png">
+    <link rel="icon" type="image/png" href="/asset/icon.png">
     <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/KaTeX/0.16.9/katex.min.css">
     <script defer src="https://cdn.bootcdn.net/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
     <script defer src="https://cdn.bootcdn.net/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
     <script src="https://cdn.bootcdn.net/ajax/libs/marked/4.3.0/marked.min.js"></script>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: "Microsoft YaHei", sans-serif;
-        }
-        
-        /* 确保 body 不产生全局滚动，滚动由内部容器负责 */
-        html, body {
-            height: 100%;
-            overflow: hidden;
-        }
-        
-        body {
-            background-color: #f5f5f5;
-            padding: 10px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-        
-        /* Token输入页面样式 */
-        .token-container {
-            background-color: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            padding: 40px;
-            width: 400px;
-            max-width: 90%;
-        }
-        
-        .token-title {
-            text-align: center;
-            font-size: 28px;
-            margin-bottom: 30px;
-            color: #333;
-        }
-        
-        .token-input {
-            margin-bottom: 20px;
-        }
-        
-        .token-input label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: bold;
-            color: #555;
-        }
-        
-        .token-input input {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 16px;
-        }
-        
-        .token-btn {
-            width: 100%;
-            padding: 12px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-            transition: background-color 0.3s;
-            margin-top: 10px;
-        }
-        
-        .token-btn:hover {
-            background-color: #45a049;
-        }
-        
-        .token-btn:disabled {
-            background-color: #cccccc;
-            cursor: not-allowed;
-        }
-        
-        /* 状态消息 (截止/错误提示 / 初始化加载) */
-        .quiz-status-message {
-            text-align: center;
-            padding: 15px;
-            margin-bottom: 20px;
-            border-radius: 6px;
-            background-color: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-            font-weight: bold;
-        }
-        .quiz-status-message.info {
-            background-color: #e9ecef;
-            color: #495057;
-            border-color: #dee2e6;
-        }
-        
-        .loading-container {
-            text-align: center;
-            padding: 40px;
-        }
-        
-        .loading-spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #4CAF50;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        /* 主页面容器（初始隐藏） */
-        .main-container {
-            display: flex;
-            height: 100%;
-            gap: 15px;
-            width: 100%;
-            display: none;
-        }
-        
-        .questions-panel {
-            flex: 1;
-            background-color: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            padding: 15px;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-        
-        .answer-panel {
-            flex: 0 0 400px;
-            background-color: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            padding: 15px;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-        
-        .panel-title {
-            text-align: center;
-            font-size: 24px;
-            margin-bottom: 15px;
-            color: #333;
-        }
-        
-        /* 自动保存失败提示框 - 与 Token 页错误样式一致，宽度填满答题卡区域 */
-        .auto-save-status {
-            text-align: center;
-            padding: 10px;
-            margin-bottom: 15px;
-            border-radius: 6px;
-            background-color: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-            font-weight: bold;
-            font-size: 13px;
-            width: 100%;
-            box-sizing: border-box;
-        }
-        
-        .questions-container {
-            flex: 1;
-            overflow-y: auto;
-            overflow-x: hidden;
-            padding-right: 10px;
-        }
-        
-        .answers-container {
-            flex: 1;
-            overflow-y: auto;
-            padding-right: 10px;
-        }
-        
-        /* 题目区域 - 水平滚动条在内容溢出时自动显示 */
-        .question-content {
-            line-height: 1.6;
-            font-size: 16px;
-            color: #333;
-            overflow-x: auto;
-            overflow-y: visible;
-        }
-        
-        /* 图片响应式：最大宽度100%，高度自适应，保持原始比例 */
-        .question-content img {
-            max-width: 100%;
-            height: auto;
-            display: block;
-            margin: 10px 0;
-            border-radius: 4px;
-        }
-        
-        .question-content pre {
-            background-color: #f5f5f5;
-            padding: 10px;
-            border-radius: 4px;
-            overflow-x: auto;
-            margin: 10px 0;
-        }
-        
-        .question-content code {
-            background-color: #f5f5f5;
-            padding: 2px 4px;
-            border-radius: 3px;
-            font-family: monospace;
-        }
-        
-        /* PDF 内嵌样式 */
-        .pdf-embed {
-            width: 100%;
-            height: 70vh;
-            min-height: 500px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-        }
-        
-        .unsupported-format {
-            padding: 40px;
-            text-align: center;
-            background-color: #f9f9f9;
-            border-radius: 8px;
-            color: #d9534f;
-            font-weight: bold;
-        }
-        
-        .answer-item {
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: 1px dashed #eee;
-        }
-        
-        .answer-item-title {
-            font-weight: bold;
-            margin-bottom: 10px;
-        }
-        
-        .options-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px 20px;
-            margin-top: 8px;
-        }
-        
-        .option {
-            display: flex;
-            align-items: center;
-            white-space: nowrap;
-        }
-        
-        .option input[type="radio"],
-        .option input[type="checkbox"] {
-            margin-right: 5px;
-            width: 16px;
-            height: 16px;
-        }
-        
-        .option label {
-            cursor: pointer;
-            user-select: none;
-        }
-        
-        .text-input {
-            width: 100%;
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-        }
-        
-        .textarea-input {
-            width: 100%;
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            resize: vertical;
-            min-height: 80px;
-            line-height: 1.5;
-            overflow: hidden;
-        }
-        
-        .single-line-container {
-            display: flex;
-            gap: 15px;
-            align-items: flex-start;
-        }
-        
-        .single-line-input {
-            flex: 1;
-        }
-        
-        .single-line-preview {
-            flex: 1;
-            padding: 8px;
-            border: 1px solid #eee;
-            border-radius: 4px;
-            min-height: 40px;
-            background-color: #f9f9f9;
-        }
-        
-        .multiple-line-container {
-            display: flex;
-            gap: 15px;
-        }
-        
-        .multiple-line-input {
-            flex: 1;
-        }
-        
-        .multiple-line-preview {
-            flex: 1;
-            padding: 8px;
-            border: 1px solid #eee;
-            border-radius: 4px;
-            min-height: 120px;
-            background-color: #f9f9f9;
-            overflow-y: auto;
-            line-height: 1.5;
-        }
-        
-        .submit-area {
-            margin-top: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: flex-start;
-        }
-        
-        .submit-btn {
-            padding: 10px 20px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-            transition: background-color 0.3s;
-        }
-        
-        .submit-btn:hover {
-            background-color: #45a049;
-        }
-        
-        .submit-btn:disabled {
-            background-color: #cccccc;
-            cursor: not-allowed;
-        }
-        
-        /* 通知样式 */
-        .notification {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 15px 20px;
-            border-radius: 4px;
-            color: white;
-            font-weight: bold;
-            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
-            z-index: 1000;
-            animation: slideIn 0.3s ease-out;
-            max-width: 300px;
-        }
-        
-        .notification.success {
-            background-color: #4CAF50;
-        }
-        
-        .notification.error {
-            background-color: #f44336;
-        }
-        
-        @keyframes slideIn {
-            from {
-                transform: translateX(100%);
-                opacity: 0;
-            }
-            to {
-                transform: translateX(0);
-                opacity: 1;
-            }
-        }
-        
-        /* 滚动条样式 - 移除轨道背景，只保留滑块 */
-        .questions-container::-webkit-scrollbar,
-        .answers-container::-webkit-scrollbar,
-        .multiple-line-preview::-webkit-scrollbar,
-        .question-content::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
-        }
-        
-        .questions-container::-webkit-scrollbar-track,
-        .answers-container::-webkit-scrollbar-track,
-        .multiple-line-preview::-webkit-scrollbar-track,
-        .question-content::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        
-        .questions-container::-webkit-scrollbar-thumb,
-        .answers-container::-webkit-scrollbar-thumb,
-        .multiple-line-preview::-webkit-scrollbar-thumb,
-        .question-content::-webkit-scrollbar-thumb {
-            background: #c1c1c1;
-            border-radius: 4px;
-        }
-        
-        .questions-container::-webkit-scrollbar-thumb:hover,
-        .answers-container::-webkit-scrollbar-thumb:hover,
-        .multiple-line-preview::-webkit-scrollbar-thumb:hover,
-        .question-content::-webkit-scrollbar-thumb:hover {
-            background: #a8a8a8;
-        }
-        
-        /* 移动端适配：上下布局，允许 body 滚动，但内部容器依然限制溢出 */
-        @media (max-width: 768px) {
-            html, body {
-                overflow-y: auto;
-            }
-            body {
-                padding: 8px;
-                align-items: flex-start;
-            }
-            .main-container {
-                flex-direction: column;
-                height: auto;
-                gap: 12px;
-            }
-            .questions-panel,
-            .answer-panel {
-                flex: none;
-                width: 100%;
-                height: auto;
-                max-height: 60vh;
-                overflow-y: auto;
-            }
-            .questions-container,
-            .answers-container {
-                overflow-y: auto;
-                max-height: none;
-            }
-            .answer-panel {
-                margin-top: 0;
-            }
-            .questions-panel,
-            .answer-panel {
-                display: flex;
-                flex-direction: column;
-            }
-            .questions-container, .answers-container {
-                flex: 1;
-                overflow-y: auto;
-            }
-            .pdf-embed {
-                height: 50vh;
-                min-height: 300px;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="/asset/style.css">
 </head>
 <body>
     <div class="token-container" id="tokenContainer">
@@ -486,12 +23,10 @@
             <button class="token-btn" id="tokenBtn">验证</button>
         </div>
     </div>
-    
     <div class="loading-container" id="loadingContainer" style="display: none;">
         <div class="loading-spinner"></div>
         <p>正在加载试题</p>
     </div>
-    
     <div class="main-container" id="mainContainer">
         <div class="questions-panel">
             <div class="questions-container" id="questionsContainer">
@@ -522,7 +57,6 @@
         let allowResubmit = false;
         let autoSaveInterval = null;
         
-        // DOM 元素
         const tokenContainer = document.getElementById('tokenContainer');
         const loadingContainer = document.getElementById('loadingContainer');
         const mainContainer = document.getElementById('mainContainer');
@@ -535,7 +69,6 @@
         const tokenInputArea = document.getElementById('tokenInputArea');
         const autoSaveStatusDiv = document.getElementById('autoSaveStatus');
         
-        // 通用通知函数
         function showNotification(message, type) {
             const existing = document.querySelector('.notification');
             if (existing) existing.remove();
@@ -546,7 +79,6 @@
             setTimeout(() => notification.remove(), 3000);
         }
         
-        // 更新自动保存状态显示（失败时显示红色时间戳，成功时清除）
         function updateAutoSaveStatus(success) {
             if (!autoSaveStatusDiv) return;
             if (success) {
@@ -554,19 +86,12 @@
                 autoSaveStatusDiv.textContent = '';
             } else {
                 const now = new Date();
-                const year = now.getFullYear();
-                const month = String(now.getMonth() + 1).padStart(2, '0');
-                const day = String(now.getDate()).padStart(2, '0');
-                const hours = String(now.getHours()).padStart(2, '0');
-                const minutes = String(now.getMinutes()).padStart(2, '0');
-                const seconds = String(now.getSeconds()).padStart(2, '0');
-                const timeStr = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+                const timeStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
                 autoSaveStatusDiv.textContent = `${timeStr} 自动保存失败`;
                 autoSaveStatusDiv.style.display = 'block';
             }
         }
         
-        // 渲染数学公式
         function renderMath(element) {
             if (typeof renderMathInElement !== 'undefined') {
                 renderMathInElement(element, {
@@ -581,7 +106,6 @@
             }
         }
         
-        // 严格校验 quiz 配置
         function validateQuizConfig(data) {
             if (!data.hasOwnProperty('paper') || typeof data.paper !== 'string' || data.paper.trim() === '') return false;
             if (!data.hasOwnProperty('allow_resubmit') || typeof data.allow_resubmit !== 'boolean') return false;
@@ -593,7 +117,6 @@
             return true;
         }
         
-        // 获取 Quiz 配置
         async function fetchQuizConfig() {
             const urlParams = new URLSearchParams(window.location.search);
             quizId = urlParams.get('quiz');
@@ -639,7 +162,6 @@
                     deadline: data.deadline
                 };
                 allowResubmit = data.allow_resubmit;
-                
                 if (quizConfig.deadline !== null && quizConfig.deadline !== undefined) {
                     const deadlineMs = parseInt(quizConfig.deadline);
                     if (!isNaN(deadlineMs) && Date.now() > deadlineMs) {
@@ -664,7 +186,7 @@
             }
         }
         
-        // 统一处理 POST 请求（验证 / 提交）
+        // 统一 POST 请求处理（适配新 code 定义：0成功，1Token无效，2已提交，3已截止）
         async function postRequest(url, payload, operationName, showSuccessNotification = true) {
             try {
                 const response = await fetch(url, {
@@ -672,6 +194,11 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
+                // 400 视为请求异常（数据格式错误等）
+                if (response.status === 400) {
+                    showNotification(`${operationName}失败：请求异常`, 'error');
+                    return { success: false, code: -1 };
+                }
                 if (response.status === 500) {
                     showNotification(`${operationName}失败：服务器异常`, 'error');
                     return { success: false, code: -1 };
@@ -682,7 +209,6 @@
                 }
                 const result = await response.json();
                 const code = result.code;
-                let errorMsg = '';
                 if (code === 0) {
                     if (showSuccessNotification) {
                         showNotification(`${operationName}成功`, 'success');
@@ -694,18 +220,21 @@
                     } else {
                         showNotification(`${operationName}失败：不允许重复提交`, 'error');
                     }
-                    return { success: false, code: code };
+                    return { success: false, code: 1 };
                 } else if (code === 2) {
-                    errorMsg = '已截止';
-                } else if (code === 3 || code === 4) {
-                    errorMsg = '请求数据异常';
+                    if (operationName === '验证') {
+                        showNotification('你已提交', 'error');
+                    } else {
+                        showNotification(`${operationName}失败：已提交，不允许重复提交`, 'error');
+                    }
+                    return { success: false, code: 2 };
+                } else if (code === 3) {
+                    showNotification(`${operationName}失败：测验已截止`, 'error');
+                    return { success: false, code: 3 };
                 } else {
-                    errorMsg = '请求异常';
+                    showNotification(`${operationName}失败：数据异常`, 'error');
+                    return { success: false, code: -1 };
                 }
-                if (errorMsg) {
-                    showNotification(`${operationName}失败：${errorMsg}`, 'error');
-                }
-                return { success: false, code: code };
             } catch (err) {
                 console.error('POST request error:', err);
                 showNotification(`${operationName}失败：${err.message}`, 'error');
@@ -713,19 +242,16 @@
             }
         }
         
-        // Token 验证
         async function verifyToken(token) {
             const result = await postRequest('/token', { quiz: quizId, token: token }, '验证', false);
             return result.success;
         }
         
-        // 获取 Paper 配置
+        // 获取 Paper 配置（字段名 answer → paper）
         async function fetchPaperConfig(paperId) {
             try {
                 const response = await fetch(`/paper/${paperId}`);
-                if (response.status === 500) {
-                    throw new Error('Server error (500)');
-                }
+                if (response.status === 500) throw new Error('Server error (500)');
                 if (!response.ok) {
                     if (response.status === 404) throw new Error('Paper data error: 404');
                     throw new Error(`Paper data error: HTTP ${response.status}`);
@@ -735,10 +261,11 @@
                     throw new Error('Paper data error: missing content field');
                 if (!data.hasOwnProperty('mime_type') || !['text/markdown', 'application/pdf'].includes(data.mime_type))
                     throw new Error('Paper data error: missing or unsupported mime_type');
-                if (!data.hasOwnProperty('answer') || !Array.isArray(data.answer))
-                    throw new Error('Paper data error: missing or invalid answer field');
-                for (let i = 0; i < data.answer.length; i++) {
-                    const item = data.answer[i];
+                // 注意：原 answer 键改为 paper
+                if (!data.hasOwnProperty('paper') || !Array.isArray(data.paper))
+                    throw new Error('Paper data error: missing or invalid paper field');
+                for (let i = 0; i < data.paper.length; i++) {
+                    const item = data.paper[i];
                     if (!item.type || !['single_selection', 'multiple_selection', 'single_line', 'multiple_line'].includes(item.type))
                         throw new Error(`Paper data error: invalid type for question ${i+1}`);
                     if (typeof item.prompt !== 'string')
@@ -753,7 +280,6 @@
             }
         }
         
-        // 获取试卷内容
         async function fetchPaperContent(url, mimeType) {
             if (mimeType === 'text/markdown') {
                 const resp = await fetch(url);
@@ -766,7 +292,6 @@
             }
         }
         
-        // 渲染试卷内容
         function renderPaperContent(contentData, mimeType) {
             questionContent.innerHTML = '';
             if (mimeType === 'text/markdown' && typeof contentData === 'string') {
@@ -784,7 +309,6 @@
             }
         }
         
-        // 从 localStorage 恢复答案
         function tryRestoreAnswers() {
             if (!quizId || !tokenValue) return false;
             const storageKey = `quiz_auto_save_${quizId}_${tokenValue}`;
@@ -824,7 +348,6 @@
             return false;
         }
         
-        // 自动保存答案
         function autoSaveAnswers() {
             if (!quizId || !tokenValue) return;
             const storageKey = `quiz_auto_save_${quizId}_${tokenValue}`;
@@ -849,17 +372,7 @@
             autoSaveInterval = setInterval(autoSaveAnswers, 30000);
         }
         
-        function showFatalError(message) {
-            tokenInputArea.style.display = 'none';
-            tokenBtn.disabled = true;
-            quizStatusMessageDiv.style.display = 'block';
-            quizStatusMessageDiv.className = 'quiz-status-message';
-            quizStatusMessageDiv.textContent = message;
-            loadingContainer.style.display = 'none';
-            tokenContainer.style.display = 'block';
-        }
-        
-        // 渲染答题卡
+        // 渲染答题卡（使用 answerSheet，即 paper 配置中的 paper 数组）
         function renderAnswerSheetFromConfig() {
             answerItemsContainer.innerHTML = '';
             userAnswers = new Array(answerSheet.length);
@@ -999,7 +512,6 @@
             }
         }
         
-        // 提交答卷
         async function submitAnswers() {
             submitBtn.disabled = true;
             submitBtn.textContent = '正在提交';
@@ -1021,7 +533,7 @@
             }
         }
         
-        // 验证 Token 后的主流程
+        // 验证 Token 后的主流程（加载试卷，异常时仅弹窗，保留输入界面）
         async function onTokenVerified() {
             tokenContainer.style.display = 'none';
             loadingContainer.style.display = 'block';
@@ -1029,7 +541,8 @@
                 const paperId = quizConfig.paper;
                 if (!paperId) throw new Error('Missing paper info');
                 const paperConf = await fetchPaperConfig(paperId);
-                answerSheet = paperConf.answer || [];
+                // 注意：answerSheet 来自 paperConf.paper
+                answerSheet = paperConf.paper || [];
                 paperContentUrl = paperConf.content;
                 paperMimeType = paperConf.mime_type;
                 if (!paperContentUrl) throw new Error('Missing paper content URL');
@@ -1049,35 +562,15 @@
                 mainContainer.style.display = 'flex';
             } catch (err) {
                 console.error('Paper loading error:', err);
-                const msg = err.message || '';
-                if (msg.includes('Server error (500)')) {
-                    showNotification('试题加载失败：服务器异常', 'error');
-                    loadingContainer.style.display = 'none';
-                    tokenContainer.style.display = 'block';
-                    tokenBtn.disabled = false;
-                    tokenBtn.textContent = '验证';
-                    if (quizStatusMessageDiv.style.display === 'none') {
-                        quizStatusMessageDiv.style.display = 'block';
-                        quizStatusMessageDiv.className = 'quiz-status-message info';
-                        quizStatusMessageDiv.textContent = '访问令牌验证通过但获取试题数据时服务器异常，可重新尝试验证';
-                    }
-                    tokenInputArea.style.display = 'block';
-                } else if (msg.includes('Failed to fetch') || msg.includes('Request error') || msg.includes('Failed to load paper content')) {
-                    showNotification('试题加载失败：请求异常', 'error');
-                    loadingContainer.style.display = 'none';
-                    tokenContainer.style.display = 'block';
-                    tokenBtn.disabled = false;
-                    tokenBtn.textContent = '验证';
-                    if (quizStatusMessageDiv.style.display === 'none') {
-                        quizStatusMessageDiv.style.display = 'block';
-                        quizStatusMessageDiv.className = 'quiz-status-message info';
-                        quizStatusMessageDiv.textContent = '访问令牌验证通过但获取试题数据的请求异常，可重新尝试验证';
-                    }
-                    tokenInputArea.style.display = 'block';
-                } else {
-                    showFatalError('试题数据异常');
-                    showNotification('试题加载失败：试题数据异常', 'error');
-                }
+                // 所有加载异常都只弹窗通知，保留 token 输入界面
+                showNotification('试题加载失败：' + (err.message || '未知错误'), 'error');
+                loadingContainer.style.display = 'none';
+                tokenContainer.style.display = 'block';
+                tokenBtn.disabled = false;
+                tokenBtn.textContent = '验证';
+                // 保持输入区域可见
+                tokenInputArea.style.display = 'block';
+                // 不清空 token 输入框
             }
         }
         
