@@ -194,7 +194,6 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
-                // 400 视为请求异常（数据格式错误等）
                 if (response.status === 400) {
                     showNotification(`${operationName}失败：请求异常`, 'error');
                     return { success: false, code: -1 };
@@ -243,11 +242,42 @@
         }
         
         async function verifyToken(token) {
-            const result = await postRequest('/token', { quiz: quizId, token: token }, '验证', false);
+            const result = await postRequest('/verify', { quiz: quizId, token: token }, '验证', false);
             return result.success;
         }
         
-        // 获取 Paper 配置（字段名 answer → paper）
+        // 自动验证 token（不弹窗，错误显示在提示框）
+        async function autoVerifyToken(token) {
+            try {
+                const response = await fetch('/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ quiz: quizId, token: token })
+                });
+                if (response.status === 400 || response.status === 404) {
+                    return { success: false, code: 1 };
+                }
+                if (!response.ok) {
+                    return { success: false, code: -1 };
+                }
+                const result = await response.json();
+                if (result.code === 0) {
+                    return { success: true };
+                } else if (result.code === 1) {
+                    return { success: false, code: 1 };
+                } else if (result.code === 2) {
+                    return { success: false, code: 2 };
+                } else if (result.code === 3) {
+                    return { success: false, code: 3 };
+                } else {
+                    return { success: false, code: -1 };
+                }
+            } catch (err) {
+                console.error('Auto verify error:', err);
+                return { success: false, code: -1 };
+            }
+        }
+        
         async function fetchPaperConfig(paperId) {
             try {
                 const response = await fetch(`/paper/${paperId}`);
@@ -261,7 +291,6 @@
                     throw new Error('Paper data error: missing content field');
                 if (!data.hasOwnProperty('mime_type') || !['text/markdown', 'application/pdf'].includes(data.mime_type))
                     throw new Error('Paper data error: missing or unsupported mime_type');
-                // 注意：原 answer 键改为 paper
                 if (!data.hasOwnProperty('paper') || !Array.isArray(data.paper))
                     throw new Error('Paper data error: missing or invalid paper field');
                 for (let i = 0; i < data.paper.length; i++) {
@@ -372,7 +401,6 @@
             autoSaveInterval = setInterval(autoSaveAnswers, 30000);
         }
         
-        // 渲染答题卡（使用 answerSheet，即 paper 配置中的 paper 数组）
         function renderAnswerSheetFromConfig() {
             answerItemsContainer.innerHTML = '';
             userAnswers = new Array(answerSheet.length);
@@ -533,7 +561,6 @@
             }
         }
         
-        // 验证 Token 后的主流程（加载试卷，异常时仅弹窗，保留输入界面）
         async function onTokenVerified() {
             tokenContainer.style.display = 'none';
             loadingContainer.style.display = 'block';
@@ -541,7 +568,6 @@
                 const paperId = quizConfig.paper;
                 if (!paperId) throw new Error('Missing paper info');
                 const paperConf = await fetchPaperConfig(paperId);
-                // 注意：answerSheet 来自 paperConf.paper
                 answerSheet = paperConf.paper || [];
                 paperContentUrl = paperConf.content;
                 paperMimeType = paperConf.mime_type;
@@ -562,19 +588,21 @@
                 mainContainer.style.display = 'flex';
             } catch (err) {
                 console.error('Paper loading error:', err);
-                // 所有加载异常都只弹窗通知，保留 token 输入界面
                 showNotification('试题加载失败：' + (err.message || '未知错误'), 'error');
                 loadingContainer.style.display = 'none';
                 tokenContainer.style.display = 'block';
                 tokenBtn.disabled = false;
                 tokenBtn.textContent = '验证';
-                // 保持输入区域可见
                 tokenInputArea.style.display = 'block';
-                // 不清空 token 输入框
             }
         }
         
         async function submitToken() {
+            // 清除可能存在的 url token 无效提示框
+            quizStatusMessageDiv.style.display = 'none';
+            quizStatusMessageDiv.textContent = '';
+            quizStatusMessageDiv.className = 'quiz-status-message info';
+            
             const inputToken = tokenInput.value.trim();
             if (!inputToken) {
                 showNotification('请输入访问令牌', 'error');
@@ -589,6 +617,33 @@
             } else {
                 tokenBtn.disabled = false;
                 tokenBtn.textContent = '验证';
+            }
+        }
+        
+        async function autoVerifyAndLoad() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlToken = urlParams.get('token');
+            if (!urlToken || urlToken.trim() === '') {
+                tokenInputArea.style.display = 'block';
+                return;
+            }
+            loadingContainer.style.display = 'block';
+            tokenContainer.style.display = 'block';
+            const verifyResult = await autoVerifyToken(urlToken);
+            if (verifyResult.success) {
+                tokenValue = urlToken;
+                await onTokenVerified();
+            } else {
+                loadingContainer.style.display = 'none';
+                tokenContainer.style.display = 'block';
+                quizStatusMessageDiv.style.display = 'block';
+                quizStatusMessageDiv.className = 'quiz-status-message';
+                quizStatusMessageDiv.textContent = '访问令牌无效，请重新输入';
+                tokenInputArea.style.display = 'block';
+                tokenBtn.disabled = false;
+                tokenBtn.textContent = '验证';
+                const newUrl = window.location.pathname + '?quiz=' + quizId;
+                window.history.replaceState({}, '', newUrl);
             }
         }
         
@@ -615,6 +670,7 @@
             window.addEventListener('beforeunload', () => {
                 if (mainContainer.style.display === 'flex') autoSaveAnswers();
             });
+            await autoVerifyAndLoad();
         });
     </script>
 </body>

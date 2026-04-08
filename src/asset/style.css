@@ -417,47 +417,73 @@ body {
     background: #a8a8a8;
 }
 
-/* 移动端适配：上下布局，允许 body 滚动，但内部容器依然限制溢出 */
+/* 移动端适配：上下布局且面板内部滚动，无全局滚动，消除底部空白 */
 @media (max-width: 768px) {
+    /* 保持 body 不滚动，高度占满视口 */
     html, body {
-        overflow-y: auto;
+        height: 100%;
+        overflow: hidden;
     }
+    
     body {
         padding: 8px;
-        align-items: flex-start;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
+    
+    /* 主容器改为垂直排列，高度占满 */
     .main-container {
         flex-direction: column;
-        height: auto;
+        height: 100%;
         gap: 12px;
     }
+    
+    /* 两个面板均使用 flex:1 均分剩余空间，内部滚动 */
     .questions-panel,
     .answer-panel {
-        flex: none;
+        flex: 1;
         width: 100%;
-        height: auto;
-        max-height: 60vh;
-        overflow-y: auto;
+        height: auto;           /* 由 flex 决定高度 */
+        max-height: none;
+        overflow: hidden;      /* 防止面板溢出，滚动由内部容器负责 */
     }
+    
+    /* 内部滚动容器启用滚动，并确保高度正确 */
     .questions-container,
     .answers-container {
-        overflow-y: auto;
-        max-height: none;
-    }
-    .answer-panel {
-        margin-top: 0;
-    }
-    .questions-panel,
-    .answer-panel {
-        display: flex;
-        flex-direction: column;
-    }
-    .questions-container, .answers-container {
         flex: 1;
         overflow-y: auto;
+        max-height: 100%;
+        padding-right: 5px;    /* 移动端适当减小 */
     }
+    
+    /* 答题卡区域可能内容较多，确保能滚动到底部无空白 */
+    .answers-container {
+        padding-bottom: 0;
+    }
+    
+    /* PDF 嵌入高度自适应，避免占用过多空间 */
     .pdf-embed {
-        height: 50vh;
-        min-height: 300px;
+        height: auto;
+        min-height: 40vh;
+    }
+    
+    /* 提交按钮区域底部留出小间距，但不会产生额外滚动空白 */
+    .submit-area {
+        margin-top: 15px;
+        margin-bottom: 5px;
+    }
+    
+    /* 单行和多行预览区域在移动端适当调整间距，防止内容溢出 */
+    .single-line-container,
+    .multiple-line-container {
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    
+    .single-line-preview,
+    .multiple-line-preview {
+        margin-top: 5px;
     }
 }

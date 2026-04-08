@@ -35,7 +35,7 @@ class Resource:
         group_dir = os.scandir("group")
         for i in group_dir:
             try:
-                group = self.load_json(i)
+                group = self.load_json(i.path)
                 if group["id"] == group_id:
                     return group
             except (FileNotFoundError, json.decoder.JSONDecodeError, KeyError):
@@ -47,26 +47,39 @@ class Resource:
         paper_dir = os.scandir("paper")
         for i in paper_dir:
             try:
-                paper = self.load_json(i)
+                paper = self.load_json(i.path)
                 if paper["id"] == paper_id:
                     return paper
             except (FileNotFoundError, json.decoder.JSONDecodeError, KeyError):
                 continue
         return None
     
-    def get_answer(self, quiz_id): # This function is a development function, please do not use in production.
-        path = self.get_quiz(quiz_id)[0]
-        if path == None:
-            raise FileNotFoundError("Answer file not found")
+    def get_result(self, quiz_id):
+        quiz_path = self.get_quiz(quiz_id)
+        if quiz_path is None:
+            return None
+        path = quiz_path[0]
+        try:
+            data = self.load_json(os.path.join(path, "result.json"))
+        except (FileNotFoundError, json.decoder.JSONDecodeError):
+            data = None
+        return data
+    
+    def get_answer(self, quiz_id):
+        quiz_path = self.get_quiz(quiz_id)
+        if quiz_path is None:
+            return None
+        path = quiz_path[0]
         try:
             data = self.load_json(os.path.join(path, "answer.json"))
         except (FileNotFoundError, json.decoder.JSONDecodeError):
             data = None
         return data
     
-    def save_answer(self, quiz_id, data): # This function is a development function, please do not use in production.
-        path = self.get_quiz(quiz_id)[0]
-        if path == None:
+    def save_answer(self, quiz_id, data):
+        quiz_path = self.get_quiz(quiz_id)
+        if quiz_path is None:
             return False
+        path = quiz_path[0]
         self.save_json(os.path.join(path, "answer.json"), data)
         return True
