@@ -168,10 +168,10 @@
                 }
                 // 404: 测验不存在或结果不存在
                 if (response.status === 404) {
-                    let errorMsg = '结果不存在';
+                    let errorMsg = '暂无测验结果';
                     try {
                         const data = await response.json();
-                        errorMsg = data.message || '结果不存在';
+                        errorMsg = data.message || '暂无测验结果';
                     } catch(e) { }
                     if (!silent) showNotification(errorMsg, 'error');
                     return { success: false, code: 2, message: errorMsg };
@@ -187,15 +187,14 @@
                 }
                 
                 const data = await response.json();
-                // 后端 /result/<quiz_id> 直接返回 result.json 内容，格式为 { id: string, result: array }
+                // 后端修改后：直接返回匹配 token 的条目对象，格式为 { token: string, result: array }
                 if (data && typeof data === 'object' && Array.isArray(data.result)) {
-                    // 在结果数组中查找匹配 token 的条目
-                    const entry = data.result.find(item => item.token === token);
-                    if (!entry) {
-                        if (!silent) showNotification('暂无作答结果', 'error');
-                        return { success: false, code: 2, message: '暂无作答结果' };
+                    // 检查返回的 token 是否匹配（理论上已经匹配）
+                    if (data.token !== token) {
+                        if (!silent) showNotification('返回数据与令牌不匹配', 'error');
+                        return { success: false, code: -1 };
                     }
-                    return { success: true, data: entry };
+                    return { success: true, data: data };
                 } else {
                     if (!silent) showNotification('结果数据格式异常', 'error');
                     return { success: false, code: -1 };

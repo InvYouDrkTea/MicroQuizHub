@@ -145,10 +145,13 @@ def get_result(quiz_id):
         return abort(400, "Missing token parameter")
     if not verify_token(quiz_id, token):
         return abort(400, "Token invalid")
-    result_data = res.get_result(quiz_id)
-    if result_data is None:
+    result = res.get_result(quiz_id)
+    if result is None:
         return abort(404, "Result not found")
-    return jsonify(result_data)
+    for i in result["result"]:
+        if i["token"] == token:
+            return jsonify(i)
+    return abort(404, "Result not found")
 
 @app.route("/attachment/<path:filename>")
 def attachment(filename):

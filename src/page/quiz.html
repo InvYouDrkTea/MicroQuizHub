@@ -247,7 +247,7 @@
                         if (operationName === '验证') {
                             showNotification('你已提交', 'error');
                         } else {
-                            showNotification(`${operationName}失败：已提交，不允许重复提交`, 'error');
+                            showNotification(`${operationName}失败：不允许重复提交`, 'error');
                         }
                         return { success: false, code: 2 };
                     } else if (code === 3) {
@@ -524,6 +524,7 @@
                 inputDiv.className = 'multiple-line-input';
                 const textarea = document.createElement('textarea');
                 textarea.className = 'textarea-input';
+                textarea.setAttribute('wrap', 'off');   // 取消自动换行
                 textarea.placeholder = '请按LaTeX格式输入，换行请输入\\newline';
                 textarea.addEventListener('input', () => {
                     userAnswers[index] = textarea.value;

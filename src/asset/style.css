@@ -5,7 +5,6 @@
     font-family: "Microsoft YaHei", sans-serif;
 }
 
-/* 确保 body 不产生全局滚动，滚动由内部容器负责 */
 html, body {
     height: 100%;
     overflow: hidden;
@@ -77,7 +76,6 @@ body {
     cursor: not-allowed;
 }
 
-/* 状态消息 (截止/错误提示 / 初始化加载) */
 .quiz-status-message {
     text-align: center;
     padding: 15px;
@@ -115,7 +113,6 @@ body {
     100% { transform: rotate(360deg); }
 }
 
-/* 主页面容器（初始隐藏） */
 .main-container {
     display: flex;
     height: 100%;
@@ -153,7 +150,6 @@ body {
     color: #333;
 }
 
-/* 自动保存失败提示框 - 与 Token 页错误样式一致，宽度填满答题卡区域 */
 .auto-save-status {
     text-align: center;
     padding: 10px;
@@ -181,7 +177,6 @@ body {
     padding-right: 10px;
 }
 
-/* 题目区域 - 水平滚动条在内容溢出时自动显示 */
 .question-content {
     line-height: 1.6;
     font-size: 16px;
@@ -190,7 +185,6 @@ body {
     overflow-y: visible;
 }
 
-/* 图片响应式：最大宽度100%，高度自适应，保持原始比例 */
 .question-content img {
     max-width: 100%;
     height: auto;
@@ -214,7 +208,6 @@ body {
     font-family: monospace;
 }
 
-/* PDF 内嵌样式 */
 .pdf-embed {
     width: 100%;
     height: 70vh;
@@ -283,45 +276,75 @@ body {
     resize: vertical;
     min-height: 80px;
     line-height: 1.5;
-    overflow: hidden;
+    overflow-x: auto;
+    white-space: nowrap;
 }
 
+/* ========== 单行填空题布局 ========== */
 .single-line-container {
     display: flex;
     gap: 15px;
     align-items: flex-start;
+    flex-direction: column;  /* PC 上下排列 */
 }
 
 .single-line-input {
-    flex: 1;
+    width: 100%;
+}
+
+.single-line-input input {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    overflow-x: auto;
+    white-space: nowrap;
 }
 
 .single-line-preview {
-    flex: 1;
+    width: 100%;
     padding: 8px;
     border: 1px solid #eee;
     border-radius: 4px;
     min-height: 40px;
     background-color: #f9f9f9;
+    overflow-x: auto;
+    white-space: nowrap;
 }
 
+/* ========== 多行填空题布局 ========== */
 .multiple-line-container {
     display: flex;
     gap: 15px;
+    flex-direction: column;  /* PC 上下排列 */
 }
 
 .multiple-line-input {
-    flex: 1;
+    width: 100%;
+}
+
+.multiple-line-input textarea {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    resize: vertical;
+    min-height: 80px;
+    line-height: 1.5;
+    overflow-x: auto;
+    white-space: nowrap;
+    /* wrap="off" 已在 HTML 中设置 */
 }
 
 .multiple-line-preview {
-    flex: 1;
+    width: 100%;
     padding: 8px;
     border: 1px solid #eee;
     border-radius: 4px;
     min-height: 120px;
     background-color: #f9f9f9;
     overflow-y: auto;
+    overflow-x: auto;
     line-height: 1.5;
 }
 
@@ -352,7 +375,6 @@ body {
     cursor: not-allowed;
 }
 
-/* 通知样式 */
 .notification {
     position: fixed;
     top: 20px;
@@ -386,11 +408,14 @@ body {
     }
 }
 
-/* 滚动条样式 - 移除轨道背景，只保留滑块 */
+/* 滚动条统一样式 */
 .questions-container::-webkit-scrollbar,
 .answers-container::-webkit-scrollbar,
 .multiple-line-preview::-webkit-scrollbar,
-.question-content::-webkit-scrollbar {
+.question-content::-webkit-scrollbar,
+.single-line-input input::-webkit-scrollbar,
+.single-line-preview::-webkit-scrollbar,
+.multiple-line-input textarea::-webkit-scrollbar {
     width: 8px;
     height: 8px;
 }
@@ -398,14 +423,20 @@ body {
 .questions-container::-webkit-scrollbar-track,
 .answers-container::-webkit-scrollbar-track,
 .multiple-line-preview::-webkit-scrollbar-track,
-.question-content::-webkit-scrollbar-track {
+.question-content::-webkit-scrollbar-track,
+.single-line-input input::-webkit-scrollbar-track,
+.single-line-preview::-webkit-scrollbar-track,
+.multiple-line-input textarea::-webkit-scrollbar-track {
     background: transparent;
 }
 
 .questions-container::-webkit-scrollbar-thumb,
 .answers-container::-webkit-scrollbar-thumb,
 .multiple-line-preview::-webkit-scrollbar-thumb,
-.question-content::-webkit-scrollbar-thumb {
+.question-content::-webkit-scrollbar-thumb,
+.single-line-input input::-webkit-scrollbar-thumb,
+.single-line-preview::-webkit-scrollbar-thumb,
+.multiple-line-input textarea::-webkit-scrollbar-thumb {
     background: #c1c1c1;
     border-radius: 4px;
 }
@@ -413,13 +444,15 @@ body {
 .questions-container::-webkit-scrollbar-thumb:hover,
 .answers-container::-webkit-scrollbar-thumb:hover,
 .multiple-line-preview::-webkit-scrollbar-thumb:hover,
-.question-content::-webkit-scrollbar-thumb:hover {
+.question-content::-webkit-scrollbar-thumb:hover,
+.single-line-input input::-webkit-scrollbar-thumb:hover,
+.single-line-preview::-webkit-scrollbar-thumb:hover,
+.multiple-line-input textarea::-webkit-scrollbar-thumb:hover {
     background: #a8a8a8;
 }
 
-/* 移动端适配：上下布局且面板内部滚动，无全局滚动，消除底部空白 */
+/* 移动端适配 */
 @media (max-width: 768px) {
-    /* 保持 body 不滚动，高度占满视口 */
     html, body {
         height: 100%;
         overflow: hidden;
@@ -432,63 +465,73 @@ body {
         justify-content: center;
     }
     
-    /* 主容器改为垂直排列，高度占满 */
     .main-container {
         flex-direction: column;
         height: 100%;
         gap: 12px;
     }
     
-    /* 两个面板均使用 flex:1 均分剩余空间，内部滚动 */
     .questions-panel,
     .answer-panel {
         flex: 1;
         width: 100%;
-        height: auto;           /* 由 flex 决定高度 */
+        height: auto;
         max-height: none;
-        overflow: hidden;      /* 防止面板溢出，滚动由内部容器负责 */
+        overflow: hidden;
     }
     
-    /* 内部滚动容器启用滚动，并确保高度正确 */
     .questions-container,
     .answers-container {
         flex: 1;
         overflow-y: auto;
         max-height: 100%;
-        padding-right: 5px;    /* 移动端适当减小 */
+        padding-right: 5px;
     }
     
-    /* 答题卡区域可能内容较多，确保能滚动到底部无空白 */
     .answers-container {
         padding-bottom: 0;
     }
     
-    /* PDF 嵌入高度自适应，避免占用过多空间 */
     .pdf-embed {
         height: auto;
         min-height: 40vh;
     }
     
-    /* 提交按钮区域底部留出小间距，但不会产生额外滚动空白 */
     .submit-area {
         margin-top: 15px;
         margin-bottom: 5px;
     }
     
-    /* 单行和多行预览区域在移动端适当调整间距，防止内容溢出 */
-    .single-line-container,
-    .multiple-line-container {
+    /* 移动端：单行填空题左右排列 */
+    .single-line-container {
+        flex-direction: row;
+        align-items: flex-start;
         gap: 8px;
-        flex-wrap: wrap;
     }
-    
-    .single-line-preview,
+    .single-line-input {
+        flex: 1;
+    }
+    .single-line-preview {
+        flex: 1;
+        margin-top: 0;
+    }
+
+    /* 移动端：多行填空题左右排列 */
+    .multiple-line-container {
+        flex-direction: row;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    .multiple-line-input {
+        flex: 1;
+    }
     .multiple-line-preview {
-        margin-top: 5px;
+        flex: 1;
+        margin-top: 0;
     }
 }
 
-/* 新增弹窗样式 (同时会补充到 style.css 中，此处内嵌以保证独立运行) */
+/* 弹窗样式 */
 .modal-overlay {
     position: fixed;
     top: 0;
@@ -559,7 +602,6 @@ body {
     opacity: 0.6;
     cursor: not-allowed;
 }
-/* 移动端适配微调 */
 @media (max-width: 768px) {
     .modal-content {
         padding: 20px;
