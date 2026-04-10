@@ -45,633 +45,683 @@
         </div>
     </div>
 
+    <!-- 确认提交弹窗 (契合整体风格) -->
+    <div class="modal-overlay" id="confirmModal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-title">确认提交</div>
+            <div class="modal-message">若当前测验不允许重复提交，提交后可能无法修改</div>
+            <div class="modal-buttons">
+                <button class="modal-btn cancel" id="modalCancelBtn">取消</button>
+                <button class="modal-btn confirm" id="modalConfirmBtn">提交</button>
+            </div>
+        </div>
+    </div>
+
     <script>
-        // 全局变量
-        let quizId = '';
-        let tokenValue = '';
-        let quizConfig = null;
-        let answerSheet = [];
-        let userAnswers = [];
-        let paperContentUrl = '';
-        let paperMimeType = '';
-        let allowResubmit = false;
-        let autoSaveInterval = null;
-        
-        const tokenContainer = document.getElementById('tokenContainer');
-        const loadingContainer = document.getElementById('loadingContainer');
-        const mainContainer = document.getElementById('mainContainer');
-        const tokenInput = document.getElementById('tokenInput');
-        const tokenBtn = document.getElementById('tokenBtn');
-        const questionContent = document.getElementById('questionContent');
-        const answerItemsContainer = document.getElementById('answerItemsContainer');
-        const submitBtn = document.getElementById('submitBtn');
-        const quizStatusMessageDiv = document.getElementById('quizStatusMessage');
-        const tokenInputArea = document.getElementById('tokenInputArea');
-        const autoSaveStatusDiv = document.getElementById('autoSaveStatus');
-        
-        function showNotification(message, type) {
-            const existing = document.querySelector('.notification');
-            if (existing) existing.remove();
-            const notification = document.createElement('div');
-            notification.className = `notification ${type}`;
-            notification.textContent = message;
-            document.body.appendChild(notification);
-            setTimeout(() => notification.remove(), 3000);
-        }
-        
-        function updateAutoSaveStatus(success) {
-            if (!autoSaveStatusDiv) return;
-            if (success) {
-                autoSaveStatusDiv.style.display = 'none';
-                autoSaveStatusDiv.textContent = '';
-            } else {
-                const now = new Date();
-                const timeStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
-                autoSaveStatusDiv.textContent = `${timeStr} 自动保存失败`;
-                autoSaveStatusDiv.style.display = 'block';
+        (function(){
+            // ----- 全局变量 -----
+            let quizId = '';
+            let tokenValue = '';
+            let quizConfig = null;
+            let answerSheet = [];
+            let userAnswers = [];
+            let paperContentUrl = '';
+            let paperMimeType = '';
+            let allowResubmit = false;
+            let autoSaveInterval = null;
+            
+            const tokenContainer = document.getElementById('tokenContainer');
+            const loadingContainer = document.getElementById('loadingContainer');
+            const mainContainer = document.getElementById('mainContainer');
+            const tokenInput = document.getElementById('tokenInput');
+            const tokenBtn = document.getElementById('tokenBtn');
+            const questionContent = document.getElementById('questionContent');
+            const answerItemsContainer = document.getElementById('answerItemsContainer');
+            const submitBtn = document.getElementById('submitBtn');
+            const quizStatusMessageDiv = document.getElementById('quizStatusMessage');
+            const tokenInputArea = document.getElementById('tokenInputArea');
+            const autoSaveStatusDiv = document.getElementById('autoSaveStatus');
+            
+            // 弹窗元素
+            const confirmModal = document.getElementById('confirmModal');
+            const modalCancelBtn = document.getElementById('modalCancelBtn');
+            const modalConfirmBtn = document.getElementById('modalConfirmBtn');
+
+            // 辅助函数：通知
+            function showNotification(message, type) {
+                const existing = document.querySelector('.notification');
+                if (existing) existing.remove();
+                const notification = document.createElement('div');
+                notification.className = `notification ${type}`;
+                notification.textContent = message;
+                document.body.appendChild(notification);
+                setTimeout(() => notification.remove(), 3000);
             }
-        }
-        
-        function renderMath(element) {
-            if (typeof renderMathInElement !== 'undefined') {
-                renderMathInElement(element, {
-                    delimiters: [
-                        {left: "$$", right: "$$", display: true},
-                        {left: "$", right: "$", display: false},
-                        {left: "\\(", right: "\\)", display: false},
-                        {left: "\\[", right: "\\]", display: true}
-                    ],
-                    throwOnError: false
-                });
+            
+            function updateAutoSaveStatus(success) {
+                if (!autoSaveStatusDiv) return;
+                if (success) {
+                    autoSaveStatusDiv.style.display = 'none';
+                    autoSaveStatusDiv.textContent = '';
+                } else {
+                    const now = new Date();
+                    const timeStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+                    autoSaveStatusDiv.textContent = `${timeStr} 自动保存失败`;
+                    autoSaveStatusDiv.style.display = 'block';
+                }
             }
-        }
-        
-        function validateQuizConfig(data) {
-            if (!data.hasOwnProperty('paper') || typeof data.paper !== 'string' || data.paper.trim() === '') return false;
-            if (!data.hasOwnProperty('allow_resubmit') || typeof data.allow_resubmit !== 'boolean') return false;
-            if (!data.hasOwnProperty('deadline')) return false;
-            if (data.deadline !== null && data.deadline !== undefined) {
-                const deadlineNum = Number(data.deadline);
-                if (isNaN(deadlineNum) || !Number.isInteger(deadlineNum)) return false;
+            
+            function renderMath(element) {
+                if (typeof renderMathInElement !== 'undefined') {
+                    renderMathInElement(element, {
+                        delimiters: [
+                            {left: "$$", right: "$$", display: true},
+                            {left: "$", right: "$", display: false},
+                            {left: "\\(", right: "\\)", display: false},
+                            {left: "\\[", right: "\\]", display: true}
+                        ],
+                        throwOnError: false
+                    });
+                }
             }
-            return true;
-        }
-        
-        async function fetchQuizConfig() {
-            const urlParams = new URLSearchParams(window.location.search);
-            quizId = urlParams.get('quiz');
-            if (!quizId) {
-                quizStatusMessageDiv.className = 'quiz-status-message';
-                quizStatusMessageDiv.textContent = '未选择测验';
-                tokenInputArea.style.display = 'none';
-                tokenBtn.disabled = true;
-                return false;
+            
+            // 校验配置 (deadline 现为秒级时间戳)
+            function validateQuizConfig(data) {
+                if (!data.hasOwnProperty('paper') || typeof data.paper !== 'string' || data.paper.trim() === '') return false;
+                if (!data.hasOwnProperty('allow_resubmit') || typeof data.allow_resubmit !== 'boolean') return false;
+                if (!data.hasOwnProperty('deadline')) return false;
+                if (data.deadline !== null && data.deadline !== undefined) {
+                    const deadlineNum = Number(data.deadline);
+                    if (isNaN(deadlineNum) || !Number.isInteger(deadlineNum)) return false;
+                }
+                return true;
             }
-            try {
-                const response = await fetch(`/quiz/${quizId}`);
-                if (response.status === 404) {
+            
+            async function fetchQuizConfig() {
+                const urlParams = new URLSearchParams(window.location.search);
+                quizId = urlParams.get('quiz');
+                if (!quizId) {
                     quizStatusMessageDiv.className = 'quiz-status-message';
-                    quizStatusMessageDiv.textContent = '测验不存在';
-                    tokenInputArea.style.display = 'none';
-                    tokenBtn.disabled = true;
-                    return false;
-                } else if (response.status === 500) {
-                    quizStatusMessageDiv.className = 'quiz-status-message';
-                    quizStatusMessageDiv.textContent = '服务器异常';
-                    tokenInputArea.style.display = 'none';
-                    tokenBtn.disabled = true;
-                    return false;
-                } else if (!response.ok) {
-                    quizStatusMessageDiv.className = 'quiz-status-message';
-                    quizStatusMessageDiv.textContent = '测验数据获取失败';
+                    quizStatusMessageDiv.textContent = '未选择测验';
                     tokenInputArea.style.display = 'none';
                     tokenBtn.disabled = true;
                     return false;
                 }
-                const data = await response.json();
-                if (!validateQuizConfig(data)) {
+                try {
+                    const response = await fetch(`/quiz/${quizId}`);
+                    if (response.status === 404) {
+                        quizStatusMessageDiv.className = 'quiz-status-message';
+                        quizStatusMessageDiv.textContent = '测验不存在';
+                        tokenInputArea.style.display = 'none';
+                        tokenBtn.disabled = true;
+                        return false;
+                    } else if (response.status === 500) {
+                        quizStatusMessageDiv.className = 'quiz-status-message';
+                        quizStatusMessageDiv.textContent = '服务器异常';
+                        tokenInputArea.style.display = 'none';
+                        tokenBtn.disabled = true;
+                        return false;
+                    } else if (!response.ok) {
+                        quizStatusMessageDiv.className = 'quiz-status-message';
+                        quizStatusMessageDiv.textContent = '测验数据获取失败';
+                        tokenInputArea.style.display = 'none';
+                        tokenBtn.disabled = true;
+                        return false;
+                    }
+                    const data = await response.json();
+                    if (!validateQuizConfig(data)) {
+                        quizStatusMessageDiv.className = 'quiz-status-message';
+                        quizStatusMessageDiv.textContent = '测验数据异常';
+                        tokenInputArea.style.display = 'none';
+                        tokenBtn.disabled = true;
+                        return false;
+                    }
+                    quizConfig = {
+                        paper: data.paper,
+                        allow_resubmit: data.allow_resubmit,
+                        deadline: data.deadline
+                    };
+                    allowResubmit = data.allow_resubmit;
+                    
+                    // ★ 修改：deadline 为秒级时间戳，比较时需乘以1000
+                    if (quizConfig.deadline !== null && quizConfig.deadline !== undefined) {
+                        const deadlineSec = parseInt(quizConfig.deadline);
+                        if (!isNaN(deadlineSec) && Date.now() > deadlineSec * 1000) {
+                            quizStatusMessageDiv.className = 'quiz-status-message';
+                            quizStatusMessageDiv.textContent = '测验已截止';
+                            tokenInputArea.style.display = 'none';
+                            tokenBtn.disabled = true;
+                            return false;
+                        }
+                    }
+                    
+                    quizStatusMessageDiv.style.display = 'none';
+                    tokenInputArea.style.display = 'block';
+                    tokenBtn.disabled = false;
+                    return true;
+                } catch (err) {
+                    console.error('Fetch quiz config error:', err);
                     quizStatusMessageDiv.className = 'quiz-status-message';
                     quizStatusMessageDiv.textContent = '测验数据异常';
                     tokenInputArea.style.display = 'none';
                     tokenBtn.disabled = true;
                     return false;
                 }
-                quizConfig = {
-                    paper: data.paper,
-                    allow_resubmit: data.allow_resubmit,
-                    deadline: data.deadline
-                };
-                allowResubmit = data.allow_resubmit;
-                if (quizConfig.deadline !== null && quizConfig.deadline !== undefined) {
-                    const deadlineMs = parseInt(quizConfig.deadline);
-                    if (!isNaN(deadlineMs) && Date.now() > deadlineMs) {
-                        quizStatusMessageDiv.className = 'quiz-status-message';
-                        quizStatusMessageDiv.textContent = '测验已截止';
-                        tokenInputArea.style.display = 'none';
-                        tokenBtn.disabled = true;
-                        return false;
-                    }
-                }
-                quizStatusMessageDiv.style.display = 'none';
-                tokenInputArea.style.display = 'block';
-                tokenBtn.disabled = false;
-                return true;
-            } catch (err) {
-                console.error('Fetch quiz config error:', err);
-                quizStatusMessageDiv.className = 'quiz-status-message';
-                quizStatusMessageDiv.textContent = '测验数据异常';
-                tokenInputArea.style.display = 'none';
-                tokenBtn.disabled = true;
-                return false;
             }
-        }
-        
-        // 统一 POST 请求处理（适配新 code 定义：0成功，1Token无效，2已提交，3已截止）
-        async function postRequest(url, payload, operationName, showSuccessNotification = true) {
-            try {
-                const response = await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                if (response.status === 400) {
-                    showNotification(`${operationName}失败：请求异常`, 'error');
-                    return { success: false, code: -1 };
-                }
-                if (response.status === 500) {
-                    showNotification(`${operationName}失败：服务器异常`, 'error');
-                    return { success: false, code: -1 };
-                }
-                if (!response.ok) {
-                    showNotification(`${operationName}失败：请求异常`, 'error');
-                    return { success: false, code: -1 };
-                }
-                const result = await response.json();
-                const code = result.code;
-                if (code === 0) {
-                    if (showSuccessNotification) {
-                        showNotification(`${operationName}成功`, 'success');
+            
+            // 统一 POST 请求处理
+            async function postRequest(url, payload, operationName, showSuccessNotification = true) {
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    if (response.status === 400) {
+                        showNotification(`${operationName}失败：请求异常`, 'error');
+                        return { success: false, code: -1 };
                     }
-                    return { success: true, code: 0 };
-                } else if (code === 1) {
-                    if (operationName === '验证') {
-                        showNotification('访问令牌无效', 'error');
+                    if (response.status === 500) {
+                        showNotification(`${operationName}失败：服务器异常`, 'error');
+                        return { success: false, code: -1 };
+                    }
+                    if (!response.ok) {
+                        showNotification(`${operationName}失败：请求异常`, 'error');
+                        return { success: false, code: -1 };
+                    }
+                    const result = await response.json();
+                    const code = result.code;
+                    if (code === 0) {
+                        if (showSuccessNotification) {
+                            showNotification(`${operationName}成功`, 'success');
+                        }
+                        return { success: true, code: 0 };
+                    } else if (code === 1) {
+                        if (operationName === '验证') {
+                            showNotification('访问令牌无效', 'error');
+                        } else {
+                            showNotification(`${operationName}失败：不允许重复提交`, 'error');
+                        }
+                        return { success: false, code: 1 };
+                    } else if (code === 2) {
+                        if (operationName === '验证') {
+                            showNotification('你已提交', 'error');
+                        } else {
+                            showNotification(`${operationName}失败：已提交，不允许重复提交`, 'error');
+                        }
+                        return { success: false, code: 2 };
+                    } else if (code === 3) {
+                        showNotification(`${operationName}失败：测验已截止`, 'error');
+                        return { success: false, code: 3 };
                     } else {
-                        showNotification(`${operationName}失败：不允许重复提交`, 'error');
+                        showNotification(`${operationName}失败：数据异常`, 'error');
+                        return { success: false, code: -1 };
                     }
-                    return { success: false, code: 1 };
-                } else if (code === 2) {
-                    if (operationName === '验证') {
-                        showNotification('你已提交', 'error');
-                    } else {
-                        showNotification(`${operationName}失败：已提交，不允许重复提交`, 'error');
+                } catch (err) {
+                    console.error('POST request error:', err);
+                    showNotification(`${operationName}失败：${err.message}`, 'error');
+                    return { success: false, code: -1 };
+                }
+            }
+            
+            async function verifyToken(token) {
+                const result = await postRequest('/verify', { quiz: quizId, token: token }, '验证', false);
+                return result.success;
+            }
+            
+            async function autoVerifyToken(token) {
+                try {
+                    const response = await fetch('/verify', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ quiz: quizId, token: token })
+                    });
+                    if (response.status === 400 || response.status === 404) {
+                        return { success: false, code: 1 };
                     }
-                    return { success: false, code: 2 };
-                } else if (code === 3) {
-                    showNotification(`${operationName}失败：测验已截止`, 'error');
-                    return { success: false, code: 3 };
+                    if (!response.ok) {
+                        return { success: false, code: -1 };
+                    }
+                    const result = await response.json();
+                    if (result.code === 0) return { success: true };
+                    else if (result.code === 1) return { success: false, code: 1 };
+                    else if (result.code === 2) return { success: false, code: 2 };
+                    else if (result.code === 3) return { success: false, code: 3 };
+                    else return { success: false, code: -1 };
+                } catch (err) {
+                    console.error('Auto verify error:', err);
+                    return { success: false, code: -1 };
+                }
+            }
+            
+            async function fetchPaperConfig(paperId) {
+                try {
+                    const response = await fetch(`/paper/${paperId}`);
+                    if (response.status === 500) throw new Error('Server error (500)');
+                    if (!response.ok) {
+                        if (response.status === 404) throw new Error('Paper data error: 404');
+                        throw new Error(`Paper data error: HTTP ${response.status}`);
+                    }
+                    const data = await response.json();
+                    if (!data.hasOwnProperty('content') || typeof data.content !== 'string' || data.content.trim() === '')
+                        throw new Error('Paper data error: missing content field');
+                    if (!data.hasOwnProperty('mime_type') || !['text/markdown', 'application/pdf'].includes(data.mime_type))
+                        throw new Error('Paper data error: missing or unsupported mime_type');
+                    if (!data.hasOwnProperty('paper') || !Array.isArray(data.paper))
+                        throw new Error('Paper data error: missing or invalid paper field');
+                    for (let i = 0; i < data.paper.length; i++) {
+                        const item = data.paper[i];
+                        if (!item.type || !['single_selection', 'multiple_selection', 'single_line', 'multiple_line'].includes(item.type))
+                            throw new Error(`Paper data error: invalid type for question ${i+1}`);
+                        if (typeof item.prompt !== 'string')
+                            throw new Error(`Paper data error: missing prompt for question ${i+1}`);
+                        if ((item.type === 'single_selection' || item.type === 'multiple_selection') && (!Array.isArray(item.option) || item.option.length === 0))
+                            throw new Error(`Paper data error: missing options for question ${i+1}`);
+                    }
+                    return data;
+                } catch (err) {
+                    if (err.message.startsWith('Paper data error')) throw err;
+                    else throw new Error(`Request error: ${err.message}`);
+                }
+            }
+            
+            async function fetchPaperContent(url, mimeType) {
+                if (mimeType === 'text/markdown') {
+                    const resp = await fetch(url);
+                    if (!resp.ok) throw new Error(`Failed to load paper content: HTTP ${resp.status}`);
+                    return await resp.text();
+                } else if (mimeType === 'application/pdf') {
+                    return url;
                 } else {
-                    showNotification(`${operationName}失败：数据异常`, 'error');
-                    return { success: false, code: -1 };
+                    throw new Error(`Unsupported paper format: ${mimeType}`);
                 }
-            } catch (err) {
-                console.error('POST request error:', err);
-                showNotification(`${operationName}失败：${err.message}`, 'error');
-                return { success: false, code: -1 };
             }
-        }
-        
-        async function verifyToken(token) {
-            const result = await postRequest('/verify', { quiz: quizId, token: token }, '验证', false);
-            return result.success;
-        }
-        
-        // 自动验证 token（不弹窗，错误显示在提示框）
-        async function autoVerifyToken(token) {
-            try {
-                const response = await fetch('/verify', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ quiz: quizId, token: token })
-                });
-                if (response.status === 400 || response.status === 404) {
-                    return { success: false, code: 1 };
-                }
-                if (!response.ok) {
-                    return { success: false, code: -1 };
-                }
-                const result = await response.json();
-                if (result.code === 0) {
-                    return { success: true };
-                } else if (result.code === 1) {
-                    return { success: false, code: 1 };
-                } else if (result.code === 2) {
-                    return { success: false, code: 2 };
-                } else if (result.code === 3) {
-                    return { success: false, code: 3 };
+            
+            function renderPaperContent(contentData, mimeType) {
+                questionContent.innerHTML = '';
+                if (mimeType === 'text/markdown' && typeof contentData === 'string') {
+                    questionContent.innerHTML = typeof marked !== 'undefined' ? marked.parse(contentData) : `<pre>${contentData}</pre>`;
+                    renderMath(questionContent);
+                } else if (mimeType === 'application/pdf' && typeof contentData === 'string') {
+                    const iframe = document.createElement('iframe');
+                    iframe.src = contentData;
+                    iframe.className = 'pdf-embed';
+                    iframe.setAttribute('frameborder', '0');
+                    questionContent.appendChild(iframe);
                 } else {
-                    return { success: false, code: -1 };
+                    questionContent.innerHTML = '<div class="unsupported-format">当前试卷格式不支持预览</div>';
+                    throw new Error('Render failed: unsupported paper format');
                 }
-            } catch (err) {
-                console.error('Auto verify error:', err);
-                return { success: false, code: -1 };
             }
-        }
-        
-        async function fetchPaperConfig(paperId) {
-            try {
-                const response = await fetch(`/paper/${paperId}`);
-                if (response.status === 500) throw new Error('Server error (500)');
-                if (!response.ok) {
-                    if (response.status === 404) throw new Error('Paper data error: 404');
-                    throw new Error(`Paper data error: HTTP ${response.status}`);
-                }
-                const data = await response.json();
-                if (!data.hasOwnProperty('content') || typeof data.content !== 'string' || data.content.trim() === '')
-                    throw new Error('Paper data error: missing content field');
-                if (!data.hasOwnProperty('mime_type') || !['text/markdown', 'application/pdf'].includes(data.mime_type))
-                    throw new Error('Paper data error: missing or unsupported mime_type');
-                if (!data.hasOwnProperty('paper') || !Array.isArray(data.paper))
-                    throw new Error('Paper data error: missing or invalid paper field');
-                for (let i = 0; i < data.paper.length; i++) {
-                    const item = data.paper[i];
-                    if (!item.type || !['single_selection', 'multiple_selection', 'single_line', 'multiple_line'].includes(item.type))
-                        throw new Error(`Paper data error: invalid type for question ${i+1}`);
-                    if (typeof item.prompt !== 'string')
-                        throw new Error(`Paper data error: missing prompt for question ${i+1}`);
-                    if ((item.type === 'single_selection' || item.type === 'multiple_selection') && (!Array.isArray(item.option) || item.option.length === 0))
-                        throw new Error(`Paper data error: missing options for question ${i+1}`);
-                }
-                return data;
-            } catch (err) {
-                if (err.message.startsWith('Paper data error')) throw err;
-                else throw new Error(`Request error: ${err.message}`);
-            }
-        }
-        
-        async function fetchPaperContent(url, mimeType) {
-            if (mimeType === 'text/markdown') {
-                const resp = await fetch(url);
-                if (!resp.ok) throw new Error(`Failed to load paper content: HTTP ${resp.status}`);
-                return await resp.text();
-            } else if (mimeType === 'application/pdf') {
-                return url;
-            } else {
-                throw new Error(`Unsupported paper format: ${mimeType}`);
-            }
-        }
-        
-        function renderPaperContent(contentData, mimeType) {
-            questionContent.innerHTML = '';
-            if (mimeType === 'text/markdown' && typeof contentData === 'string') {
-                questionContent.innerHTML = typeof marked !== 'undefined' ? marked.parse(contentData) : `<pre>${contentData}</pre>`;
-                renderMath(questionContent);
-            } else if (mimeType === 'application/pdf' && typeof contentData === 'string') {
-                const iframe = document.createElement('iframe');
-                iframe.src = contentData;
-                iframe.className = 'pdf-embed';
-                iframe.setAttribute('frameborder', '0');
-                questionContent.appendChild(iframe);
-            } else {
-                questionContent.innerHTML = '<div class="unsupported-format">当前试卷格式不支持预览</div>';
-                throw new Error('Render failed: unsupported paper format');
-            }
-        }
-        
-        function tryRestoreAnswers() {
-            if (!quizId || !tokenValue) return false;
-            const storageKey = `quiz_auto_save_${quizId}_${tokenValue}`;
-            const saved = localStorage.getItem(storageKey);
-            if (!saved) return false;
-            try {
-                const data = JSON.parse(saved);
-                if (data.quizId === quizId && data.token === tokenValue && Array.isArray(data.answers) && data.answers.length === answerSheet.length) {
-                    userAnswers = data.answers.slice();
-                    for (let i = 0; i < answerSheet.length; i++) {
-                        const answer = userAnswers[i];
-                        const itemType = answerSheet[i].type;
-                        const container = document.querySelector(`.answer-item[data-question-index="${i}"]`);
-                        if (!container) continue;
-                        if (itemType === 'single_selection' && answer !== null && answer !== undefined) {
-                            const radio = container.querySelector(`input[name="question_${i}"][value="${answer}"]`);
-                            if (radio) radio.checked = true;
-                        } else if (itemType === 'multiple_selection' && Array.isArray(answer)) {
-                            answer.forEach(optIdx => {
-                                const checkbox = container.querySelector(`input[name="question_${i}"][value="${optIdx}"]`);
-                                if (checkbox) checkbox.checked = true;
-                            });
-                        } else if ((itemType === 'single_line' || itemType === 'multiple_line') && typeof answer === 'string') {
-                            const input = container.querySelector(itemType === 'single_line' ? '.text-input' : '.textarea-input');
-                            if (input) {
-                                input.value = answer;
-                                input.dispatchEvent(new Event('input', { bubbles: true }));
+            
+            function tryRestoreAnswers() {
+                if (!quizId || !tokenValue) return false;
+                const storageKey = `quiz_auto_save_${quizId}_${tokenValue}`;
+                const saved = localStorage.getItem(storageKey);
+                if (!saved) return false;
+                try {
+                    const data = JSON.parse(saved);
+                    if (data.quizId === quizId && data.token === tokenValue && Array.isArray(data.answers) && data.answers.length === answerSheet.length) {
+                        userAnswers = data.answers.slice();
+                        for (let i = 0; i < answerSheet.length; i++) {
+                            const answer = userAnswers[i];
+                            const itemType = answerSheet[i].type;
+                            const container = document.querySelector(`.answer-item[data-question-index="${i}"]`);
+                            if (!container) continue;
+                            if (itemType === 'single_selection' && answer !== null && answer !== undefined) {
+                                const radio = container.querySelector(`input[name="question_${i}"][value="${answer}"]`);
+                                if (radio) radio.checked = true;
+                            } else if (itemType === 'multiple_selection' && Array.isArray(answer)) {
+                                answer.forEach(optIdx => {
+                                    const checkbox = container.querySelector(`input[name="question_${i}"][value="${optIdx}"]`);
+                                    if (checkbox) checkbox.checked = true;
+                                });
+                            } else if ((itemType === 'single_line' || itemType === 'multiple_line') && typeof answer === 'string') {
+                                const input = container.querySelector(itemType === 'single_line' ? '.text-input' : '.textarea-input');
+                                if (input) {
+                                    input.value = answer;
+                                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                                }
                             }
                         }
+                        updateAutoSaveStatus(true);
+                        return true;
                     }
+                } catch (e) {
+                    console.warn('Failed to restore answers:', e);
+                }
+                return false;
+            }
+            
+            function autoSaveAnswers() {
+                if (!quizId || !tokenValue) return;
+                const storageKey = `quiz_auto_save_${quizId}_${tokenValue}`;
+                const saveData = { quizId, token: tokenValue, answers: userAnswers, timestamp: Date.now() };
+                try {
+                    localStorage.setItem(storageKey, JSON.stringify(saveData));
                     updateAutoSaveStatus(true);
-                    return true;
+                } catch (e) {
+                    console.error('Auto-save failed:', e);
+                    updateAutoSaveStatus(false);
                 }
-            } catch (e) {
-                console.warn('Failed to restore answers:', e);
             }
-            return false;
-        }
-        
-        function autoSaveAnswers() {
-            if (!quizId || !tokenValue) return;
-            const storageKey = `quiz_auto_save_${quizId}_${tokenValue}`;
-            const saveData = { quizId, token: tokenValue, answers: userAnswers, timestamp: Date.now() };
-            try {
-                localStorage.setItem(storageKey, JSON.stringify(saveData));
+            
+            function stopAutoSave() {
+                if (autoSaveInterval) clearInterval(autoSaveInterval);
+                autoSaveInterval = null;
+            }
+            
+            function startAutoSave() {
+                stopAutoSave();
                 updateAutoSaveStatus(true);
-            } catch (e) {
-                console.error('Auto-save failed:', e);
-                updateAutoSaveStatus(false);
+                autoSaveInterval = setInterval(autoSaveAnswers, 30000);
             }
-        }
-        
-        function stopAutoSave() {
-            if (autoSaveInterval) clearInterval(autoSaveInterval);
-            autoSaveInterval = null;
-        }
-        
-        function startAutoSave() {
-            stopAutoSave();
-            updateAutoSaveStatus(true);
-            autoSaveInterval = setInterval(autoSaveAnswers, 30000);
-        }
-        
-        function renderAnswerSheetFromConfig() {
-            answerItemsContainer.innerHTML = '';
-            userAnswers = new Array(answerSheet.length);
-            answerSheet.forEach((item, idx) => {
-                switch (item.type) {
-                    case 'single_selection': userAnswers[idx] = null; break;
-                    case 'multiple_selection': userAnswers[idx] = []; break;
-                    case 'single_line':
-                    case 'multiple_line': userAnswers[idx] = ''; break;
-                    default: userAnswers[idx] = null;
-                }
-                const answerItem = document.createElement('div');
-                answerItem.className = 'answer-item';
-                answerItem.dataset.questionIndex = idx;
-                answerItem.dataset.questionType = item.type;
-                const title = document.createElement('div');
-                title.className = 'answer-item-title';
-                title.textContent = item.prompt;
-                answerItem.appendChild(title);
-                if (item.type === 'single_selection') renderSingleSelection(answerItem, item, idx);
-                else if (item.type === 'multiple_selection') renderMultipleSelection(answerItem, item, idx);
-                else if (item.type === 'single_line') renderSingleLine(answerItem, item, idx);
-                else if (item.type === 'multiple_line') renderMultipleLine(answerItem, item, idx);
-                answerItemsContainer.appendChild(answerItem);
-            });
-        }
-        
-        function renderSingleSelection(container, item, index) {
-            const optionsDiv = document.createElement('div');
-            optionsDiv.className = 'options-container';
-            (item.option || []).forEach((opt, optIdx) => {
-                const optDiv = document.createElement('div');
-                optDiv.className = 'option';
-                const radio = document.createElement('input');
-                radio.type = 'radio';
-                radio.name = `question_${index}`;
-                radio.id = `question_${index}_option_${optIdx}`;
-                radio.value = optIdx;
-                radio.addEventListener('change', () => { if (radio.checked) userAnswers[index] = optIdx; });
-                const label = document.createElement('label');
-                label.htmlFor = radio.id;
-                label.textContent = opt;
-                optDiv.appendChild(radio);
-                optDiv.appendChild(label);
-                optionsDiv.appendChild(optDiv);
-            });
-            container.appendChild(optionsDiv);
-        }
-        
-        function renderMultipleSelection(container, item, index) {
-            const optionsDiv = document.createElement('div');
-            optionsDiv.className = 'options-container';
-            (item.option || []).forEach((opt, optIdx) => {
-                const optDiv = document.createElement('div');
-                optDiv.className = 'option';
-                const cb = document.createElement('input');
-                cb.type = 'checkbox';
-                cb.name = `question_${index}`;
-                cb.id = `question_${index}_option_${optIdx}`;
-                cb.value = optIdx;
-                cb.addEventListener('change', () => {
-                    if (cb.checked) userAnswers[index].push(optIdx);
-                    else {
-                        const pos = userAnswers[index].indexOf(optIdx);
-                        if (pos > -1) userAnswers[index].splice(pos, 1);
+            
+            function renderAnswerSheetFromConfig() {
+                answerItemsContainer.innerHTML = '';
+                userAnswers = new Array(answerSheet.length);
+                answerSheet.forEach((item, idx) => {
+                    switch (item.type) {
+                        case 'single_selection': userAnswers[idx] = null; break;
+                        case 'multiple_selection': userAnswers[idx] = []; break;
+                        case 'single_line':
+                        case 'multiple_line': userAnswers[idx] = ''; break;
+                        default: userAnswers[idx] = null;
                     }
-                    userAnswers[index] = [...new Set(userAnswers[index])];
+                    const answerItem = document.createElement('div');
+                    answerItem.className = 'answer-item';
+                    answerItem.dataset.questionIndex = idx;
+                    answerItem.dataset.questionType = item.type;
+                    const title = document.createElement('div');
+                    title.className = 'answer-item-title';
+                    title.textContent = item.prompt;
+                    answerItem.appendChild(title);
+                    if (item.type === 'single_selection') renderSingleSelection(answerItem, item, idx);
+                    else if (item.type === 'multiple_selection') renderMultipleSelection(answerItem, item, idx);
+                    else if (item.type === 'single_line') renderSingleLine(answerItem, item, idx);
+                    else if (item.type === 'multiple_line') renderMultipleLine(answerItem, item, idx);
+                    answerItemsContainer.appendChild(answerItem);
                 });
-                const label = document.createElement('label');
-                label.htmlFor = cb.id;
-                label.textContent = opt;
-                optDiv.appendChild(cb);
-                optDiv.appendChild(label);
-                optionsDiv.appendChild(optDiv);
-            });
-            container.appendChild(optionsDiv);
-        }
-        
-        function renderSingleLine(container, item, index) {
-            const wrapper = document.createElement('div');
-            wrapper.className = 'single-line-container';
-            const inputDiv = document.createElement('div');
-            inputDiv.className = 'single-line-input';
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.className = 'text-input';
-            input.placeholder = '请按LaTeX格式输入';
-            input.addEventListener('input', () => {
-                userAnswers[index] = input.value;
-                updateFormulaPreview(`preview_single_${index}`, input.value, false);
-            });
-            const preview = document.createElement('div');
-            preview.className = 'single-line-preview';
-            preview.id = `preview_single_${index}`;
-            inputDiv.appendChild(input);
-            wrapper.appendChild(inputDiv);
-            wrapper.appendChild(preview);
-            container.appendChild(wrapper);
-        }
-        
-        function renderMultipleLine(container, item, index) {
-            const wrapper = document.createElement('div');
-            wrapper.className = 'multiple-line-container';
-            const inputDiv = document.createElement('div');
-            inputDiv.className = 'multiple-line-input';
-            const textarea = document.createElement('textarea');
-            textarea.className = 'textarea-input';
-            textarea.placeholder = '请按LaTeX格式输入，换行请输入\\newline';
-            textarea.addEventListener('input', () => {
-                userAnswers[index] = textarea.value;
-                textarea.style.height = 'auto';
-                textarea.style.height = Math.max(80, textarea.scrollHeight) + 'px';
-                updateFormulaPreview(`preview_multiple_${index}`, textarea.value, true);
-            });
-            const preview = document.createElement('div');
-            preview.className = 'multiple-line-preview';
-            preview.id = `preview_multiple_${index}`;
-            setTimeout(() => { textarea.style.height = '80px'; }, 10);
-            inputDiv.appendChild(textarea);
-            wrapper.appendChild(inputDiv);
-            wrapper.appendChild(preview);
-            container.appendChild(wrapper);
-        }
-        
-        function updateFormulaPreview(previewId, latexCode, displayMode) {
-            const preview = document.getElementById(previewId);
-            if (!preview) return;
-            preview.innerHTML = '';
-            if (!latexCode) return;
-            try {
-                if (typeof katex !== 'undefined')
-                    katex.render(latexCode, preview, { throwOnError: false, displayMode });
-                else
-                    preview.innerHTML = '<span style="color:#f44336;">LaTeX library not loaded</span>';
-            } catch (e) {
-                preview.innerHTML = '<span style="color:#f44336;">LaTeX parse error</span>';
             }
-        }
-        
-        async function submitAnswers() {
-            submitBtn.disabled = true;
-            submitBtn.textContent = '正在提交';
-            const result = await postRequest('/submit', { quiz: quizId, token: tokenValue, answer: userAnswers }, '提交', true);
-            if (result.success) {
-                if (!allowResubmit) {
-                    submitBtn.disabled = true;
-                    submitBtn.textContent = '已提交';
+            
+            function renderSingleSelection(container, item, index) {
+                const optionsDiv = document.createElement('div');
+                optionsDiv.className = 'options-container';
+                (item.option || []).forEach((opt, optIdx) => {
+                    const optDiv = document.createElement('div');
+                    optDiv.className = 'option';
+                    const radio = document.createElement('input');
+                    radio.type = 'radio';
+                    radio.name = `question_${index}`;
+                    radio.id = `question_${index}_option_${optIdx}`;
+                    radio.value = optIdx;
+                    radio.addEventListener('change', () => { if (radio.checked) userAnswers[index] = optIdx; });
+                    const label = document.createElement('label');
+                    label.htmlFor = radio.id;
+                    label.textContent = opt;
+                    optDiv.appendChild(radio);
+                    optDiv.appendChild(label);
+                    optionsDiv.appendChild(optDiv);
+                });
+                container.appendChild(optionsDiv);
+            }
+            
+            function renderMultipleSelection(container, item, index) {
+                const optionsDiv = document.createElement('div');
+                optionsDiv.className = 'options-container';
+                (item.option || []).forEach((opt, optIdx) => {
+                    const optDiv = document.createElement('div');
+                    optDiv.className = 'option';
+                    const cb = document.createElement('input');
+                    cb.type = 'checkbox';
+                    cb.name = `question_${index}`;
+                    cb.id = `question_${index}_option_${optIdx}`;
+                    cb.value = optIdx;
+                    cb.addEventListener('change', () => {
+                        if (cb.checked) userAnswers[index].push(optIdx);
+                        else {
+                            const pos = userAnswers[index].indexOf(optIdx);
+                            if (pos > -1) userAnswers[index].splice(pos, 1);
+                        }
+                        userAnswers[index] = [...new Set(userAnswers[index])];
+                    });
+                    const label = document.createElement('label');
+                    label.htmlFor = cb.id;
+                    label.textContent = opt;
+                    optDiv.appendChild(cb);
+                    optDiv.appendChild(label);
+                    optionsDiv.appendChild(optDiv);
+                });
+                container.appendChild(optionsDiv);
+            }
+            
+            function renderSingleLine(container, item, index) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'single-line-container';
+                const inputDiv = document.createElement('div');
+                inputDiv.className = 'single-line-input';
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'text-input';
+                input.placeholder = '请按LaTeX格式输入';
+                input.addEventListener('input', () => {
+                    userAnswers[index] = input.value;
+                    updateFormulaPreview(`preview_single_${index}`, input.value, false);
+                });
+                const preview = document.createElement('div');
+                preview.className = 'single-line-preview';
+                preview.id = `preview_single_${index}`;
+                inputDiv.appendChild(input);
+                wrapper.appendChild(inputDiv);
+                wrapper.appendChild(preview);
+                container.appendChild(wrapper);
+            }
+            
+            function renderMultipleLine(container, item, index) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'multiple-line-container';
+                const inputDiv = document.createElement('div');
+                inputDiv.className = 'multiple-line-input';
+                const textarea = document.createElement('textarea');
+                textarea.className = 'textarea-input';
+                textarea.placeholder = '请按LaTeX格式输入，换行请输入\\newline';
+                textarea.addEventListener('input', () => {
+                    userAnswers[index] = textarea.value;
+                    textarea.style.height = 'auto';
+                    textarea.style.height = Math.max(80, textarea.scrollHeight) + 'px';
+                    updateFormulaPreview(`preview_multiple_${index}`, textarea.value, true);
+                });
+                const preview = document.createElement('div');
+                preview.className = 'multiple-line-preview';
+                preview.id = `preview_multiple_${index}`;
+                setTimeout(() => { textarea.style.height = '80px'; }, 10);
+                inputDiv.appendChild(textarea);
+                wrapper.appendChild(inputDiv);
+                wrapper.appendChild(preview);
+                container.appendChild(wrapper);
+            }
+            
+            function updateFormulaPreview(previewId, latexCode, displayMode) {
+                const preview = document.getElementById(previewId);
+                if (!preview) return;
+                preview.innerHTML = '';
+                if (!latexCode) return;
+                try {
+                    if (typeof katex !== 'undefined')
+                        katex.render(latexCode, preview, { throwOnError: false, displayMode });
+                    else
+                        preview.innerHTML = '<span style="color:#f44336;">LaTeX library not loaded</span>';
+                } catch (e) {
+                    preview.innerHTML = '<span style="color:#f44336;">LaTeX parse error</span>';
+                }
+            }
+            
+            // 实际提交逻辑 (由确认弹窗触发)
+            async function performSubmit() {
+                submitBtn.disabled = true;
+                submitBtn.textContent = '正在提交';
+                
+                const result = await postRequest('/submit', { quiz: quizId, token: tokenValue, answer: userAnswers }, '提交', true);
+                
+                if (result.success) {
+                    if (!allowResubmit) {
+                        submitBtn.disabled = true;
+                        submitBtn.textContent = '已提交';
+                    } else {
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = '提交';
+                    }
+                    localStorage.removeItem(`quiz_auto_save_${quizId}_${tokenValue}`);
+                    updateAutoSaveStatus(true);
+                    stopAutoSave();
                 } else {
                     submitBtn.disabled = false;
                     submitBtn.textContent = '提交';
                 }
-                localStorage.removeItem(`quiz_auto_save_${quizId}_${tokenValue}`);
-                updateAutoSaveStatus(true);
-                stopAutoSave();
-            } else {
-                submitBtn.disabled = false;
-                submitBtn.textContent = '提交';
             }
-        }
-        
-        async function onTokenVerified() {
-            tokenContainer.style.display = 'none';
-            loadingContainer.style.display = 'block';
-            try {
-                const paperId = quizConfig.paper;
-                if (!paperId) throw new Error('Missing paper info');
-                const paperConf = await fetchPaperConfig(paperId);
-                answerSheet = paperConf.paper || [];
-                paperContentUrl = paperConf.content;
-                paperMimeType = paperConf.mime_type;
-                if (!paperContentUrl) throw new Error('Missing paper content URL');
-                let contentData = null;
-                if (paperMimeType === 'text/markdown')
-                    contentData = await fetchPaperContent(paperContentUrl, 'text/markdown');
-                else if (paperMimeType === 'application/pdf')
-                    contentData = paperContentUrl;
-                else
-                    throw new Error(`Unsupported paper type: ${paperMimeType}`);
-                renderPaperContent(contentData, paperMimeType);
-                renderAnswerSheetFromConfig();
-                tryRestoreAnswers();
-                submitBtn.disabled = false;
-                startAutoSave();
-                loadingContainer.style.display = 'none';
-                mainContainer.style.display = 'flex';
-            } catch (err) {
-                console.error('Paper loading error:', err);
-                showNotification('试题加载失败：' + (err.message || '未知错误'), 'error');
-                loadingContainer.style.display = 'none';
-                tokenContainer.style.display = 'block';
-                tokenBtn.disabled = false;
-                tokenBtn.textContent = '验证';
-                tokenInputArea.style.display = 'block';
-            }
-        }
-        
-        async function submitToken() {
-            // 清除可能存在的 url token 无效提示框
-            quizStatusMessageDiv.style.display = 'none';
-            quizStatusMessageDiv.textContent = '';
-            quizStatusMessageDiv.className = 'quiz-status-message info';
             
-            const inputToken = tokenInput.value.trim();
-            if (!inputToken) {
-                showNotification('请输入访问令牌', 'error');
-                return;
+            // 显示确认弹窗
+            function showConfirmModal() {
+                if (submitBtn.disabled) return;  // 防止重复触发
+                confirmModal.style.display = 'flex';
             }
-            tokenBtn.disabled = true;
-            tokenBtn.textContent = '正在验证';
-            const isValid = await verifyToken(inputToken);
-            if (isValid) {
-                tokenValue = inputToken;
-                await onTokenVerified();
-            } else {
-                tokenBtn.disabled = false;
-                tokenBtn.textContent = '验证';
+            
+            function hideConfirmModal() {
+                confirmModal.style.display = 'none';
             }
-        }
-        
-        async function autoVerifyAndLoad() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const urlToken = urlParams.get('token');
-            if (!urlToken || urlToken.trim() === '') {
-                tokenInputArea.style.display = 'block';
-                return;
+            
+            // 确认按钮点击：关闭弹窗并执行提交
+            function onConfirmSubmit() {
+                hideConfirmModal();
+                performSubmit();
             }
-            loadingContainer.style.display = 'block';
-            tokenContainer.style.display = 'block';
-            const verifyResult = await autoVerifyToken(urlToken);
-            if (verifyResult.success) {
-                tokenValue = urlToken;
-                await onTokenVerified();
-            } else {
-                loadingContainer.style.display = 'none';
-                tokenContainer.style.display = 'block';
-                quizStatusMessageDiv.style.display = 'block';
-                quizStatusMessageDiv.className = 'quiz-status-message';
-                quizStatusMessageDiv.textContent = '访问令牌无效，请重新输入';
-                tokenInputArea.style.display = 'block';
-                tokenBtn.disabled = false;
-                tokenBtn.textContent = '验证';
-                const newUrl = window.location.pathname + '?quiz=' + quizId;
-                window.history.replaceState({}, '', newUrl);
+            
+            async function onTokenVerified() {
+                tokenContainer.style.display = 'none';
+                loadingContainer.style.display = 'block';
+                try {
+                    const paperId = quizConfig.paper;
+                    if (!paperId) throw new Error('Missing paper info');
+                    const paperConf = await fetchPaperConfig(paperId);
+                    answerSheet = paperConf.paper || [];
+                    paperContentUrl = paperConf.content;
+                    paperMimeType = paperConf.mime_type;
+                    if (!paperContentUrl) throw new Error('Missing paper content URL');
+                    let contentData = null;
+                    if (paperMimeType === 'text/markdown')
+                        contentData = await fetchPaperContent(paperContentUrl, 'text/markdown');
+                    else if (paperMimeType === 'application/pdf')
+                        contentData = paperContentUrl;
+                    else
+                        throw new Error(`Unsupported paper type: ${paperMimeType}`);
+                    renderPaperContent(contentData, paperMimeType);
+                    renderAnswerSheetFromConfig();
+                    tryRestoreAnswers();
+                    submitBtn.disabled = false;
+                    startAutoSave();
+                    loadingContainer.style.display = 'none';
+                    mainContainer.style.display = 'flex';
+                } catch (err) {
+                    console.error('Paper loading error:', err);
+                    showNotification('试题加载失败：' + (err.message || '未知错误'), 'error');
+                    loadingContainer.style.display = 'none';
+                    tokenContainer.style.display = 'block';
+                    tokenBtn.disabled = false;
+                    tokenBtn.textContent = '验证';
+                    tokenInputArea.style.display = 'block';
+                }
             }
-        }
-        
-        document.addEventListener('DOMContentLoaded', async () => {
-            const isQuizValid = await fetchQuizConfig();
-            if (!isQuizValid) {
+            
+            async function submitToken() {
+                quizStatusMessageDiv.style.display = 'none';
+                quizStatusMessageDiv.textContent = '';
+                quizStatusMessageDiv.className = 'quiz-status-message info';
+                
+                const inputToken = tokenInput.value.trim();
+                if (!inputToken) {
+                    showNotification('请输入访问令牌', 'error');
+                    return;
+                }
                 tokenBtn.disabled = true;
-                return;
+                tokenBtn.textContent = '正在验证';
+                const isValid = await verifyToken(inputToken);
+                if (isValid) {
+                    tokenValue = inputToken;
+                    await onTokenVerified();
+                } else {
+                    tokenBtn.disabled = false;
+                    tokenBtn.textContent = '验证';
+                }
             }
-            tokenBtn.addEventListener('click', submitToken);
-            tokenInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') submitToken(); });
-            submitBtn.addEventListener('click', submitAnswers);
-            if (typeof renderMathInElement !== 'undefined') {
-                renderMathInElement(document.body, {
-                    delimiters: [
-                        {left: "$$", right: "$$", display: true},
-                        {left: "$", right: "$", display: false},
-                        {left: "\\(", right: "\\)", display: false},
-                        {left: "\\[", right: "\\]", display: true}
-                    ],
-                    throwOnError: false
+            
+            async function autoVerifyAndLoad() {
+                const urlParams = new URLSearchParams(window.location.search);
+                const urlToken = urlParams.get('token');
+                if (!urlToken || urlToken.trim() === '') {
+                    tokenInputArea.style.display = 'block';
+                    return;
+                }
+                loadingContainer.style.display = 'block';
+                tokenContainer.style.display = 'block';
+                const verifyResult = await autoVerifyToken(urlToken);
+                if (verifyResult.success) {
+                    tokenValue = urlToken;
+                    await onTokenVerified();
+                } else {
+                    loadingContainer.style.display = 'none';
+                    tokenContainer.style.display = 'block';
+                    quizStatusMessageDiv.style.display = 'block';
+                    quizStatusMessageDiv.className = 'quiz-status-message';
+                    quizStatusMessageDiv.textContent = '访问令牌无效，请重新输入';
+                    tokenInputArea.style.display = 'block';
+                    tokenBtn.disabled = false;
+                    tokenBtn.textContent = '验证';
+                    const newUrl = window.location.pathname + '?quiz=' + quizId;
+                    window.history.replaceState({}, '', newUrl);
+                }
+            }
+            
+            // 初始化事件
+            document.addEventListener('DOMContentLoaded', async () => {
+                const isQuizValid = await fetchQuizConfig();
+                if (!isQuizValid) {
+                    tokenBtn.disabled = true;
+                    return;
+                }
+                
+                tokenBtn.addEventListener('click', submitToken);
+                tokenInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') submitToken(); });
+                
+                // 提交按钮改为打开确认弹窗
+                submitBtn.addEventListener('click', showConfirmModal);
+                
+                // 弹窗事件
+                modalCancelBtn.addEventListener('click', hideConfirmModal);
+                modalConfirmBtn.addEventListener('click', onConfirmSubmit);
+                // 点击遮罩层关闭
+                confirmModal.addEventListener('click', (e) => {
+                    if (e.target === confirmModal) hideConfirmModal();
                 });
-            }
-            window.addEventListener('beforeunload', () => {
-                if (mainContainer.style.display === 'flex') autoSaveAnswers();
+                
+                if (typeof renderMathInElement !== 'undefined') {
+                    renderMathInElement(document.body, {
+                        delimiters: [
+                            {left: "$$", right: "$$", display: true},
+                            {left: "$", right: "$", display: false},
+                            {left: "\\(", right: "\\)", display: false},
+                            {left: "\\[", right: "\\]", display: true}
+                        ],
+                        throwOnError: false
+                    });
+                }
+                
+                window.addEventListener('beforeunload', () => {
+                    if (mainContainer.style.display === 'flex') autoSaveAnswers();
+                });
+                
+                await autoVerifyAndLoad();
             });
-            await autoVerifyAndLoad();
-        });
+        })();
     </script>
 </body>
 </html>

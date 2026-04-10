@@ -2,9 +2,11 @@ import json
 import os
 from cachetools import cached, TTLCache
 
-quiz_cache = TTLCache(maxsize=8, ttl=30)
-paper_cache = TTLCache(maxsize=8, ttl=30)
-group_cache = TTLCache(maxsize=8, ttl=30)
+cache_ttl = 30
+
+quiz_cache = TTLCache(maxsize=8, ttl=cache_ttl)
+paper_cache = TTLCache(maxsize=8, ttl=cache_ttl)
+group_cache = TTLCache(maxsize=8, ttl=cache_ttl)
 
 class Resource:
     def load_json(self, path):

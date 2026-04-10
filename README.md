@@ -1,7 +1,7 @@
 # Micro Quiz Hub
 
 ## Introduction
-This is a web server program, powered by Flsk framwork, you can use this server to publish exam or survey.
+This is a web server program, powered by Flask framework, you can use this server to publish exam or survey.
 
 ## Run
 You can place your launch script at anywhere, just import package `main` in `src`, use Flask development server or your WSGI server.
@@ -13,13 +13,13 @@ main.app.run()
 ## Routes
 | Route                           | Method | Description                   |
 | ---                             | ---    | ---                           |
-| /page/<path:file>               | GET    | Get pages.                    |
+| /page/<file>                    | GET    | Get pages.                    |
 | /quiz/<quiz_id>                 | GET    | Get quiz configuration.       |
 | /paper/<paper_id>               | GET    | Get paper configuration.      |
-| /token                          | POST   | Verify token.                 |
+| /verify                         | POST   | Verify token.                 |
 | /submit                         | POST   | Submit.                       |
-| /attachment/<path:file>         | GET    | Get attachments.              |
-| /answer/<quiz_id>?token=<token> | GET    | Get answer of quiz and token. |
+| /attachment/<file>              | GET    | Get attachments.              |
+| /result/<quiz_id>?token=<token> | GET    | Get result of quiz for token. |
 
 ## GET method return
 All GET methods will return the original content of the corresponding resources.
@@ -33,9 +33,10 @@ All POST methods will return a JSON, general like:
 }
 ```
 The defined values of status code are as follows:
-- 0 - No error.
-- 1 - Value invalid.
-- 2 - Data unexpected.
+- 0 - No error
+- 1 - Value invalid
+- 2 - Submitted (duplicate submissions are not allowed)
+- 3 - Closed
 
 ## Quiz configuration
 ```json
@@ -53,12 +54,23 @@ The defined values of status code are as follows:
 {
     "id": "<paper_id>",
     "content": "<url>",
-    "answer": [
+    "mime_type": "<mime_type>",
+    "paper": [
         {
             "type": "single_selection/multiple_selection/single_line/multiple_line",
             "prompt": "<Prompt, like '[1]'.>",
             "option": ["A", "B", "<Option prompt, like 'C'>"]
         }
     ]
+}
+```
+
+## Group configuration
+```json
+{
+	"id":"<group_id>",
+	"token":[
+		"<token>"
+	]
 }
 ```

@@ -87,15 +87,11 @@
         function validateQuizConfig(data) {
             if (!data.hasOwnProperty('paper') || typeof data.paper !== 'string' || data.paper.trim() === '') return false;
             if (!data.hasOwnProperty('allow_resubmit') || typeof data.allow_resubmit !== 'boolean') return false;
-            if (!data.hasOwnProperty('deadline')) return false;
-            if (data.deadline !== null && data.deadline !== undefined) {
-                const deadlineNum = Number(data.deadline);
-                if (isNaN(deadlineNum) || !Number.isInteger(deadlineNum)) return false;
-            }
+            // deadline 字段不再需要，但保留校验以便兼容存在该字段的情况，但不做截止判断
             return true;
         }
         
-        async function fetchQuizConfig(skipDeadlineCheck = false) {
+        async function fetchQuizConfig() {
             const urlParams = new URLSearchParams(window.location.search);
             quizId = urlParams.get('quiz');
             if (!quizId) {
@@ -139,16 +135,7 @@
                     allow_resubmit: data.allow_resubmit,
                     deadline: data.deadline
                 };
-                if (!skipDeadlineCheck && quizConfig.deadline !== null && quizConfig.deadline !== undefined) {
-                    const deadlineMs = parseInt(quizConfig.deadline);
-                    if (!isNaN(deadlineMs) && Date.now() > deadlineMs) {
-                        quizStatusMessageDiv.className = 'quiz-status-message';
-                        quizStatusMessageDiv.textContent = '测验已截止';
-                        tokenInputArea.style.display = 'none';
-                        tokenBtn.disabled = true;
-                        return false;
-                    }
-                }
+                // 结果页面不进行截止校验，直接显示
                 quizStatusMessageDiv.style.display = 'none';
                 tokenInputArea.style.display = 'block';
                 tokenBtn.disabled = false;
@@ -163,32 +150,33 @@
             }
         }
         
+        // 获取结果：返回统一格式 { success: boolean, data?: object, code?: number, message?: string }
         async function fetchResult(token, silent = false) {
             try {
                 const url = `/result/${quizId}?token=${encodeURIComponent(token)}`;
                 const response = await fetch(url);
                 
+                // 400: token 无效等
                 if (response.status === 400) {
                     let errorMsg = '请求异常';
                     try {
                         const data = await response.json();
-                        if (data && data.message === 'Token invalid') errorMsg = '访问令牌无效';
-                        else errorMsg = data.message || '请求异常';
+                        errorMsg = data.message || '请求异常';
                     } catch(e) { }
                     if (!silent) showNotification(errorMsg, 'error');
                     return { success: false, code: 1, message: errorMsg };
                 }
+                // 404: 测验不存在或结果不存在
                 if (response.status === 404) {
-                    let errorMsg = '未找到资源';
+                    let errorMsg = '结果不存在';
                     try {
                         const data = await response.json();
-                        if (data && data.message === 'Quiz not found') errorMsg = '测验不存在';
-                        else if (data && data.message === 'Result not found') errorMsg = '结果不存在';
-                        else errorMsg = data.message || '未找到资源';
+                        errorMsg = data.message || '结果不存在';
                     } catch(e) { }
                     if (!silent) showNotification(errorMsg, 'error');
-                    return { success: false, code: response.status === 404 ? (errorMsg.includes('结果') ? 2 : -1) : -1, message: errorMsg };
+                    return { success: false, code: 2, message: errorMsg };
                 }
+                // 500: 服务器错误
                 if (response.status === 500) {
                     if (!silent) showNotification('获取结果失败：服务器异常', 'error');
                     return { success: false, code: -1 };
@@ -199,20 +187,17 @@
                 }
                 
                 const data = await response.json();
-                const code = data.code;
-                if (code === 0) {
-                    return { success: true, data: data };
-                } else if (code === 1) {
-                    if (!silent) showNotification('访问令牌无效', 'error');
-                    return { success: false, code: 1 };
-                } else if (code === 2) {
-                    if (!silent) showNotification('暂无作答结果', 'error');
-                    return { success: false, code: 2 };
-                } else if (code === 3) {
-                    if (!silent) showNotification('测验已截止，但仍可查看已有结果', 'error');
-                    return { success: false, code: 3 };
+                // 后端 /result/<quiz_id> 直接返回 result.json 内容，格式为 { id: string, result: array }
+                if (data && typeof data === 'object' && Array.isArray(data.result)) {
+                    // 在结果数组中查找匹配 token 的条目
+                    const entry = data.result.find(item => item.token === token);
+                    if (!entry) {
+                        if (!silent) showNotification('暂无作答结果', 'error');
+                        return { success: false, code: 2, message: '暂无作答结果' };
+                    }
+                    return { success: true, data: entry };
                 } else {
-                    if (!silent) showNotification('获取结果失败：返回数据异常', 'error');
+                    if (!silent) showNotification('结果数据格式异常', 'error');
                     return { success: false, code: -1 };
                 }
             } catch (err) {
@@ -282,24 +267,30 @@
             }
         }
         
+        // 渲染结果，传入 entry.result 数组（每个元素包含 answer 和 mark）
         function renderResultAnswerSheet(resultArray) {
             answerItemsContainer.innerHTML = '';
+            // 计算总分
             let totalScore = 0;
             for (let i = 0; i < resultArray.length; i++) {
                 const mark = resultArray[i].mark;
                 if (typeof mark === 'number' && !isNaN(mark)) totalScore += mark;
             }
             resultTitle.textContent = `${tokenValue}，总分：${totalScore}`;
+            
             answerSheet.forEach((item, idx) => {
                 const resultItem = resultArray[idx] || { answer: null, mark: 0 };
                 const userAnswer = resultItem.answer;
                 const score = (typeof resultItem.mark === 'number' && !isNaN(resultItem.mark)) ? resultItem.mark : 0;
+                
                 const answerItem = document.createElement('div');
                 answerItem.className = 'answer-item';
+                
                 const title = document.createElement('div');
                 title.className = 'answer-item-title';
                 title.textContent = item.prompt;
                 answerItem.appendChild(title);
+                
                 if (item.type === 'single_selection') {
                     const optionsDiv = document.createElement('div');
                     optionsDiv.className = 'options-container';
@@ -309,7 +300,8 @@
                         const radio = document.createElement('input');
                         radio.type = 'radio';
                         radio.disabled = true;
-                        if (userAnswer === optIdx) radio.checked = true;
+                        // userAnswer 可能是数字索引，也可能是选项文本（但按设计应为索引）
+                        if (userAnswer === optIdx || userAnswer === String(optIdx)) radio.checked = true;
                         const label = document.createElement('label');
                         label.textContent = opt;
                         optDiv.appendChild(radio);
@@ -320,14 +312,20 @@
                 } else if (item.type === 'multiple_selection') {
                     const optionsDiv = document.createElement('div');
                     optionsDiv.className = 'options-container';
-                    const selectedSet = new Set(userAnswer || []);
+                    let selectedSet = new Set();
+                    if (Array.isArray(userAnswer)) {
+                        selectedSet = new Set(userAnswer.map(v => String(v)));
+                    } else if (typeof userAnswer === 'string') {
+                        // 兼容可能出现的逗号分隔字符串
+                        selectedSet = new Set(userAnswer.split(',').map(s => s.trim()));
+                    }
                     (item.option || []).forEach((opt, optIdx) => {
                         const optDiv = document.createElement('div');
                         optDiv.className = 'option';
                         const cb = document.createElement('input');
                         cb.type = 'checkbox';
                         cb.disabled = true;
-                        if (selectedSet.has(optIdx)) cb.checked = true;
+                        if (selectedSet.has(String(optIdx))) cb.checked = true;
                         const label = document.createElement('label');
                         label.textContent = opt;
                         optDiv.appendChild(cb);
@@ -349,7 +347,11 @@
                         previewDiv.style.border = '1px solid #eee';
                         previewDiv.style.borderRadius = '4px';
                         previewDiv.style.backgroundColor = '#f9f9f9';
-                        try { katex.render(userAnswer, previewDiv, { throwOnError: false, displayMode: false }); } catch(e) { previewDiv.textContent = userAnswer; }
+                        try { 
+                            katex.render(userAnswer, previewDiv, { throwOnError: false, displayMode: false }); 
+                        } catch(e) { 
+                            previewDiv.textContent = userAnswer; 
+                        }
                         answerItem.appendChild(previewDiv);
                     }
                 } else if (item.type === 'multiple_line') {
@@ -366,14 +368,23 @@
                         previewDiv.style.borderRadius = '4px';
                         previewDiv.style.backgroundColor = '#f9f9f9';
                         previewDiv.style.whiteSpace = 'pre-wrap';
-                        try { katex.render(userAnswer, previewDiv, { throwOnError: false, displayMode: true }); } catch(e) { previewDiv.textContent = userAnswer; }
+                        try { 
+                            katex.render(userAnswer, previewDiv, { throwOnError: false, displayMode: true }); 
+                        } catch(e) { 
+                            previewDiv.textContent = userAnswer; 
+                        }
                         answerItem.appendChild(previewDiv);
                     }
                 }
+                
                 const scoreDiv = document.createElement('div');
                 scoreDiv.className = 'question-score';
+                scoreDiv.style.marginTop = '8px';
+                scoreDiv.style.fontWeight = 'bold';
+                scoreDiv.style.color = '#2c3e50';
                 scoreDiv.textContent = `得分：${score}`;
                 answerItem.appendChild(scoreDiv);
+                
                 answerItemsContainer.appendChild(answerItem);
             });
         }
@@ -392,7 +403,10 @@
                     quizStatusMessageDiv.style.display = 'none';
                     return;
                 }
-                const resultData = resultResp.data;
+                // resultResp.data 是匹配 token 的条目，包含 .result 数组
+                const entry = resultResp.data;
+                const resultArray = entry.result;  // 每个元素 { answer, mark }
+                
                 const paperId = quizConfig.paper;
                 if (!paperId) throw new Error('Missing paper info');
                 const paperConf = await fetchPaperConfig(paperId);
@@ -400,6 +414,7 @@
                 paperContentUrl = paperConf.content;
                 paperMimeType = paperConf.mime_type;
                 if (!paperContentUrl) throw new Error('Missing paper content URL');
+                
                 let contentData = null;
                 if (paperMimeType === 'text/markdown')
                     contentData = await fetchPaperContent(paperContentUrl, 'text/markdown');
@@ -407,8 +422,10 @@
                     contentData = paperContentUrl;
                 else
                     throw new Error(`Unsupported paper type: ${paperMimeType}`);
+                
                 renderPaperContent(contentData, paperMimeType);
-                renderResultAnswerSheet(resultData.result || []);
+                renderResultAnswerSheet(resultArray);
+                
                 loadingContainer.style.display = 'none';
                 mainContainer.style.display = 'flex';
             } catch (err) {
@@ -451,11 +468,14 @@
             }
             loadingContainer.style.display = 'block';
             tokenContainer.style.display = 'block';
+            
             const resultResp = await fetchResult(urlToken, true);
             if (resultResp.success) {
                 tokenValue = urlToken;
                 try {
-                    const resultData = resultResp.data;
+                    const entry = resultResp.data;
+                    const resultArray = entry.result;
+                    
                     const paperId = quizConfig.paper;
                     if (!paperId) throw new Error('Missing paper info');
                     const paperConf = await fetchPaperConfig(paperId);
@@ -463,6 +483,7 @@
                     paperContentUrl = paperConf.content;
                     paperMimeType = paperConf.mime_type;
                     if (!paperContentUrl) throw new Error('Missing paper content URL');
+                    
                     let contentData = null;
                     if (paperMimeType === 'text/markdown')
                         contentData = await fetchPaperContent(paperContentUrl, 'text/markdown');
@@ -470,8 +491,10 @@
                         contentData = paperContentUrl;
                     else
                         throw new Error(`Unsupported paper type: ${paperMimeType}`);
+                    
                     renderPaperContent(contentData, paperMimeType);
-                    renderResultAnswerSheet(resultData.result || []);
+                    renderResultAnswerSheet(resultArray);
+                    
                     loadingContainer.style.display = 'none';
                     mainContainer.style.display = 'flex';
                     tokenContainer.style.display = 'none';
@@ -496,19 +519,21 @@
                 tokenInputArea.style.display = 'block';
                 tokenBtn.disabled = false;
                 tokenBtn.textContent = '验证';
+                // 清除 URL 中的 token 参数
                 const newUrl = window.location.pathname + '?quiz=' + quizId;
                 window.history.replaceState({}, '', newUrl);
             }
         }
         
         document.addEventListener('DOMContentLoaded', async () => {
-            const isQuizValid = await fetchQuizConfig(true);
+            const isQuizValid = await fetchQuizConfig();
             if (!isQuizValid) {
                 tokenBtn.disabled = true;
                 return;
             }
             tokenBtn.addEventListener('click', submitToken);
             tokenInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') submitToken(); });
+            
             if (typeof renderMathInElement !== 'undefined') {
                 renderMathInElement(document.body, {
                     delimiters: [
@@ -520,6 +545,7 @@
                     throwOnError: false
                 });
             }
+            
             await autoFetchAndLoad();
         });
     </script>
