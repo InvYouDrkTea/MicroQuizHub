@@ -266,6 +266,9 @@ body {
     padding: 8px;
     border: 1px solid #ddd;
     border-radius: 4px;
+    /* 允许内容溢出产生滚动条，继承滚动条样式 */
+    overflow-x: auto;
+    white-space: nowrap;
 }
 
 .textarea-input {
@@ -277,7 +280,9 @@ body {
     min-height: 80px;
     line-height: 1.5;
     overflow-x: auto;
+    overflow-y: auto;
     white-space: nowrap;
+    /* wrap="off" 已在 HTML 中设置 */
 }
 
 /* ========== 单行填空题布局 ========== */
@@ -285,11 +290,11 @@ body {
     display: flex;
     gap: 15px;
     align-items: flex-start;
-    flex-direction: column;  /* PC 上下排列 */
+    flex-direction: row;      /* PC 左右排列 */
 }
 
 .single-line-input {
-    width: 100%;
+    flex: 1;
 }
 
 .single-line-input input {
@@ -302,7 +307,7 @@ body {
 }
 
 .single-line-preview {
-    width: 100%;
+    flex: 1;
     padding: 8px;
     border: 1px solid #eee;
     border-radius: 4px;
@@ -310,17 +315,19 @@ body {
     background-color: #f9f9f9;
     overflow-x: auto;
     white-space: nowrap;
+    margin-top: 0;
 }
 
 /* ========== 多行填空题布局 ========== */
 .multiple-line-container {
     display: flex;
     gap: 15px;
-    flex-direction: column;  /* PC 上下排列 */
+    flex-direction: row;      /* PC 左右排列 */
+    align-items: flex-start;
 }
 
 .multiple-line-input {
-    width: 100%;
+    flex: 1;
 }
 
 .multiple-line-input textarea {
@@ -337,7 +344,7 @@ body {
 }
 
 .multiple-line-preview {
-    width: 100%;
+    flex: 1;
     padding: 8px;
     border: 1px solid #eee;
     border-radius: 4px;
@@ -346,6 +353,7 @@ body {
     overflow-y: auto;
     overflow-x: auto;
     line-height: 1.5;
+    margin-top: 0;
 }
 
 .submit-area {
@@ -408,14 +416,16 @@ body {
     }
 }
 
-/* 滚动条统一样式 */
+/* 滚动条统一样式（包含结果页面展示原始答案的输入框） */
 .questions-container::-webkit-scrollbar,
 .answers-container::-webkit-scrollbar,
 .multiple-line-preview::-webkit-scrollbar,
 .question-content::-webkit-scrollbar,
 .single-line-input input::-webkit-scrollbar,
 .single-line-preview::-webkit-scrollbar,
-.multiple-line-input textarea::-webkit-scrollbar {
+.multiple-line-input textarea::-webkit-scrollbar,
+.text-input::-webkit-scrollbar,
+.textarea-input::-webkit-scrollbar {
     width: 8px;
     height: 8px;
 }
@@ -426,7 +436,9 @@ body {
 .question-content::-webkit-scrollbar-track,
 .single-line-input input::-webkit-scrollbar-track,
 .single-line-preview::-webkit-scrollbar-track,
-.multiple-line-input textarea::-webkit-scrollbar-track {
+.multiple-line-input textarea::-webkit-scrollbar-track,
+.text-input::-webkit-scrollbar-track,
+.textarea-input::-webkit-scrollbar-track {
     background: transparent;
 }
 
@@ -436,7 +448,9 @@ body {
 .question-content::-webkit-scrollbar-thumb,
 .single-line-input input::-webkit-scrollbar-thumb,
 .single-line-preview::-webkit-scrollbar-thumb,
-.multiple-line-input textarea::-webkit-scrollbar-thumb {
+.multiple-line-input textarea::-webkit-scrollbar-thumb,
+.text-input::-webkit-scrollbar-thumb,
+.textarea-input::-webkit-scrollbar-thumb {
     background: #c1c1c1;
     border-radius: 4px;
 }
@@ -447,7 +461,9 @@ body {
 .question-content::-webkit-scrollbar-thumb:hover,
 .single-line-input input::-webkit-scrollbar-thumb:hover,
 .single-line-preview::-webkit-scrollbar-thumb:hover,
-.multiple-line-input textarea::-webkit-scrollbar-thumb:hover {
+.multiple-line-input textarea::-webkit-scrollbar-thumb:hover,
+.text-input::-webkit-scrollbar-thumb:hover,
+.textarea-input::-webkit-scrollbar-thumb:hover {
     background: #a8a8a8;
 }
 
@@ -502,32 +518,10 @@ body {
         margin-bottom: 5px;
     }
     
-    /* 移动端：单行填空题左右排列 */
-    .single-line-container {
-        flex-direction: row;
-        align-items: flex-start;
-        gap: 8px;
-    }
-    .single-line-input {
-        flex: 1;
-    }
-    .single-line-preview {
-        flex: 1;
-        margin-top: 0;
-    }
-
-    /* 移动端：多行填空题左右排列 */
+    /* 移动端保持左右排列（与 PC 一致，但可额外调整间距） */
+    .single-line-container,
     .multiple-line-container {
-        flex-direction: row;
-        align-items: flex-start;
         gap: 8px;
-    }
-    .multiple-line-input {
-        flex: 1;
-    }
-    .multiple-line-preview {
-        flex: 1;
-        margin-top: 0;
     }
 }
 
