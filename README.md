@@ -11,15 +11,15 @@ main.app.run()
 ```
 
 ## Routes
-| Route                           | Method | Description                   |
-| ---                             | ---    | ---                           |
-| /page/<file>                    | GET    | Get pages.                    |
-| /quiz/<quiz_id>                 | GET    | Get quiz configuration.       |
-| /paper/<paper_id>               | GET    | Get paper configuration.      |
-| /verify                         | POST   | Verify token.                 |
-| /submit                         | POST   | Submit.                       |
-| /attachment/<file>              | GET    | Get attachments.              |
-| /result/<quiz_id>?token=<token> | GET    | Get result of quiz for token. |
+| Route                                       | Method | Description                   |
+| ---                                         | ---    | ---                           |
+| /page/&lt;path:file&gt;                     | GET    | Get pages.                    |
+| /quiz/&lt;quiz_id&gt;                       | GET    | Get quiz configuration.       |
+| /paper/&lt;paper_id&gt;                     | GET    | Get paper configuration.      |
+| /verify                                     | POST   | Verify token.                 |
+| /submit                                     | POST   | Submit.                       |
+| /attachment/&lt;path:file&gt;               | GET    | Get attachments.              |
+| /result/&lt;quiz_id&gt;?token=&lt;token&gt; | GET    | Get result of quiz for token. |
 
 ## GET method return
 All GET methods will return the original content of the corresponding resources.
@@ -43,9 +43,9 @@ The defined values of status code are as follows:
 {
     "id": "<quiz_id>",
     "paper": "<paper_id>",
-    "group": "<group_id>",
-    "deadline": "<timestamp>/null",
-    "allow_resubmit": "<bool>"
+    "group": "<group_id>"/null,
+    "deadline": <timestamp>/null,
+    "allow_resubmit": <bool>
 }
 ```
 

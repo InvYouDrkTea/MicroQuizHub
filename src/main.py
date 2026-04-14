@@ -15,16 +15,28 @@ def verify_token(quiz_id, token):
     quiz_info = res.get_quiz(quiz_id)
     if quiz_info is None:
         return False
-    group = res.get_group(quiz_info[1]["group"])
-    if token in group["token"]:
+    group_id = quiz_info[1].get("group")
+    
+    if group_id is None:
         return True
-    return False
+    group = res.get_group(group_id)
+    if group is None:
+        return False
+    return token in group.get("token", [])
 
 def check_submission(quiz_id, token):
-    quiz_config = res.get_quiz(quiz_id)[1]
-    if not verify_token(quiz_id, token):
-        return 1, "Token invalid"
-    
+    quiz_info = res.get_quiz(quiz_id)
+    if quiz_info is None:
+        return 1, "Quiz not found"
+    quiz_config = quiz_info[1]
+    group_id = quiz_config.get("group")
+
+    if group_id is None:
+        token = ""
+    else:
+        if not verify_token(quiz_id, token):
+            return 1, "Token invalid"
+
     deadline = quiz_config.get("deadline")
     if deadline is not None:
         try:
@@ -37,9 +49,12 @@ def check_submission(quiz_id, token):
     answer_data = res.get_answer(quiz_id)
     allow_resubmit = quiz_config.get("allow_resubmit", False)
 
+    if group_id is None:
+        return 0, "OK"
+
     if answer_data is None:
         return 0, "OK"
-    
+
     answer_list = answer_data.get("answer", [])
     for entry in answer_list:
         if entry.get("token") == token:
@@ -83,7 +98,7 @@ def verify():
         token = request_json["token"]
     except (KeyError, TypeError):
         return abort(400, "Missing required keys: quiz and token or values are invalid")
-    
+
     code, message = check_submission(quiz_id, token)
     return jsonify(return_json(code, message))
 
@@ -97,39 +112,46 @@ def paper(paper_id):
 @app.route("/submit", methods=["POST"])
 def submit():
     request_json = request.get_json()
-    
+
     try:
         quiz_id = request_json["quiz"]
         token = request_json["token"]
         user_answers = request_json["answer"]
     except (KeyError, TypeError):
         return abort(400, "Missing required keys: quiz, token, answer or values are invalid")
+
     quiz_info = res.get_quiz(quiz_id)
     if quiz_info is None:
         return abort(404, "Quiz not found")
-    
-    code, message = check_submission(quiz_id, token)
-    if code != 0:
-        return jsonify(return_json(code, message))
 
     quiz_config = quiz_info[1]
-    allow_resubmit = quiz_config.get("allow_resubmit", False)
+    group_id = quiz_config.get("group")
+
+    effective_token = token
+    if group_id is None:
+        effective_token = ""
+
+    code, message = check_submission(quiz_id, effective_token)
+    if code != 0:
+        return jsonify(return_json(code, message))
 
     answer_data = res.get_answer(quiz_id)
     if answer_data is None:
         answer_data = {"id": quiz_id, "answer": []}
-    
-    existing_idx = None
-    for idx, entry in enumerate(answer_data["answer"]):
-        if entry.get("token") == token:
-            existing_idx = idx
-            break
 
-    new_entry = {"token": token, "answer": user_answers}
-    if existing_idx is not None:
-        answer_data["answer"][existing_idx] = new_entry
+    if group_id is None:
+        answer_data["answer"].append({"token": effective_token, "answer": user_answers})
     else:
-        answer_data["answer"].append(new_entry)
+        existing_idx = None
+        for idx, entry in enumerate(answer_data["answer"]):
+            if entry.get("token") == effective_token:
+                existing_idx = idx
+                break
+        new_entry = {"token": effective_token, "answer": user_answers}
+        if existing_idx is not None:
+            answer_data["answer"][existing_idx] = new_entry
+        else:
+            answer_data["answer"].append(new_entry)
 
     if res.save_answer(quiz_id, answer_data):
         return jsonify(return_json(0, "Submitted successfully"))
@@ -138,13 +160,21 @@ def submit():
 
 @app.route("/result/<quiz_id>", methods=["GET"])
 def get_result(quiz_id):
-    if res.get_quiz(quiz_id)[1] is None:
+    quiz_info = res.get_quiz(quiz_id)
+    if quiz_info is None or quiz_info[1] is None:
         return abort(404, "Quiz not found")
+    quiz_config = quiz_info[1]
+    group_id = quiz_config.get("group")
+
+    if group_id is None:
+        return abort(400, "Result not available for this quiz")
+
     token = request.args.get("token")
     if not token:
         return abort(400, "Missing token parameter")
     if not verify_token(quiz_id, token):
         return abort(400, "Token invalid")
+
     result = res.get_result(quiz_id)
     if result is None:
         return abort(404, "Result not found")

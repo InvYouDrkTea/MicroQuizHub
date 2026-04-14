@@ -45,11 +45,10 @@
         </div>
     </div>
 
-    <!-- 确认提交弹窗 (契合整体风格) -->
     <div class="modal-overlay" id="confirmModal" style="display: none;">
         <div class="modal-content">
             <div class="modal-title">确认提交</div>
-            <div class="modal-message">若当前测验不允许重复提交，提交后可能无法修改</div>
+            <div class="modal-message" id="confirmModalMessage"></div>
             <div class="modal-buttons">
                 <button class="modal-btn cancel" id="modalCancelBtn">取消</button>
                 <button class="modal-btn confirm" id="modalConfirmBtn">提交</button>
@@ -82,12 +81,11 @@
             const tokenInputArea = document.getElementById('tokenInputArea');
             const autoSaveStatusDiv = document.getElementById('autoSaveStatus');
             
-            // 弹窗元素
             const confirmModal = document.getElementById('confirmModal');
             const modalCancelBtn = document.getElementById('modalCancelBtn');
             const modalConfirmBtn = document.getElementById('modalConfirmBtn');
+            const confirmModalMessage = document.getElementById('confirmModalMessage');
 
-            // 辅助函数：通知
             function showNotification(message, type) {
                 const existing = document.querySelector('.notification');
                 if (existing) existing.remove();
@@ -125,16 +123,17 @@
                 }
             }
             
-            // 校验配置 (deadline 现为秒级时间戳)
-            function validateQuizConfig(data) {
-                if (!data.hasOwnProperty('paper') || typeof data.paper !== 'string' || data.paper.trim() === '') return false;
-                if (!data.hasOwnProperty('allow_resubmit') || typeof data.allow_resubmit !== 'boolean') return false;
-                if (!data.hasOwnProperty('deadline')) return false;
-                if (data.deadline !== null && data.deadline !== undefined) {
-                    const deadlineNum = Number(data.deadline);
-                    if (isNaN(deadlineNum) || !Number.isInteger(deadlineNum)) return false;
+            function normalizeQuizConfig(data) {
+                if (typeof data.id !== 'string' || typeof data.paper !== 'string' || data.paper.trim() === '') {
+                    return null;
                 }
-                return true;
+                return {
+                    id: data.id,
+                    paper: data.paper,
+                    group: (data.hasOwnProperty('group') && data.group !== null && typeof data.group === 'string') ? data.group : null,
+                    deadline: (data.hasOwnProperty('deadline') && data.deadline !== null) ? Number(data.deadline) : null,
+                    allow_resubmit: (data.hasOwnProperty('allow_resubmit') && typeof data.allow_resubmit === 'boolean') ? data.allow_resubmit : false
+                };
             }
             
             async function fetchQuizConfig() {
@@ -169,24 +168,19 @@
                         return false;
                     }
                     const data = await response.json();
-                    if (!validateQuizConfig(data)) {
+                    const normalized = normalizeQuizConfig(data);
+                    if (!normalized) {
                         quizStatusMessageDiv.className = 'quiz-status-message';
                         quizStatusMessageDiv.textContent = '测验数据异常';
                         tokenInputArea.style.display = 'none';
                         tokenBtn.disabled = true;
                         return false;
                     }
-                    quizConfig = {
-                        paper: data.paper,
-                        allow_resubmit: data.allow_resubmit,
-                        deadline: data.deadline
-                    };
-                    allowResubmit = data.allow_resubmit;
+                    quizConfig = normalized;
+                    allowResubmit = quizConfig.allow_resubmit;
                     
-                    // ★ 修改：deadline 为秒级时间戳，比较时需乘以1000
-                    if (quizConfig.deadline !== null && quizConfig.deadline !== undefined) {
-                        const deadlineSec = parseInt(quizConfig.deadline);
-                        if (!isNaN(deadlineSec) && Date.now() > deadlineSec * 1000) {
+                    if (quizConfig.deadline !== null && !isNaN(quizConfig.deadline)) {
+                        if (Date.now() > quizConfig.deadline * 1000) {
                             quizStatusMessageDiv.className = 'quiz-status-message';
                             quizStatusMessageDiv.textContent = '测验已截止';
                             tokenInputArea.style.display = 'none';
@@ -196,6 +190,15 @@
                     }
                     
                     quizStatusMessageDiv.style.display = 'none';
+                    
+                    if (quizConfig.group === null) {
+                        tokenInputArea.style.display = 'none';
+                        tokenBtn.disabled = true;
+                        tokenValue = '';
+                        await onTokenVerified();
+                        return true;
+                    }
+                    
                     tokenInputArea.style.display = 'block';
                     tokenBtn.disabled = false;
                     return true;
@@ -209,7 +212,6 @@
                 }
             }
             
-            // 统一 POST 请求处理
             async function postRequest(url, payload, operationName, showSuccessNotification = true) {
                 try {
                     const response = await fetch(url, {
@@ -265,11 +267,13 @@
             }
             
             async function verifyToken(token) {
+                if (quizConfig.group === null) return true;
                 const result = await postRequest('/verify', { quiz: quizId, token: token }, '验证', false);
                 return result.success;
             }
             
             async function autoVerifyToken(token) {
+                if (quizConfig.group === null) return { success: true };
                 try {
                     const response = await fetch('/verify', {
                         method: 'POST',
@@ -524,7 +528,7 @@
                 inputDiv.className = 'multiple-line-input';
                 const textarea = document.createElement('textarea');
                 textarea.className = 'textarea-input';
-                textarea.setAttribute('wrap', 'off');   // 取消自动换行
+                textarea.setAttribute('wrap', 'off');
                 textarea.placeholder = '请按LaTeX格式输入，换行请输入\\newline';
                 textarea.addEventListener('input', () => {
                     userAnswers[index] = textarea.value;
@@ -557,7 +561,6 @@
                 }
             }
             
-            // 实际提交逻辑 (由确认弹窗触发)
             async function performSubmit() {
                 submitBtn.disabled = true;
                 submitBtn.textContent = '正在提交';
@@ -581,9 +584,11 @@
                 }
             }
             
-            // 显示确认弹窗
             function showConfirmModal() {
-                if (submitBtn.disabled) return;  // 防止重复触发
+                if (submitBtn.disabled) return;
+                confirmModalMessage.textContent = allowResubmit 
+                    ? '当前测验允许重复提交，提交后仍可修改' 
+                    : '当前测验不允许重复提交，提交后不可修改';
                 confirmModal.style.display = 'flex';
             }
             
@@ -591,7 +596,6 @@
                 confirmModal.style.display = 'none';
             }
             
-            // 确认按钮点击：关闭弹窗并执行提交
             function onConfirmSubmit() {
                 hideConfirmModal();
                 performSubmit();
@@ -624,12 +628,14 @@
                     mainContainer.style.display = 'flex';
                 } catch (err) {
                     console.error('Paper loading error:', err);
-                    showNotification('试题加载失败：' + (err.message || '未知错误'), 'error');
                     loadingContainer.style.display = 'none';
                     tokenContainer.style.display = 'block';
-                    tokenBtn.disabled = false;
-                    tokenBtn.textContent = '验证';
-                    tokenInputArea.style.display = 'block';
+                    quizStatusMessageDiv.style.display = 'block';
+                    quizStatusMessageDiv.className = 'quiz-status-message';
+                    quizStatusMessageDiv.textContent = '试题加载失败：' + (err.message || '未知错误');
+                    // ★ 隐藏 token 输入区域
+                    tokenInputArea.style.display = 'none';
+                    tokenBtn.disabled = true;
                 }
             }
             
@@ -658,6 +664,11 @@
             async function autoVerifyAndLoad() {
                 const urlParams = new URLSearchParams(window.location.search);
                 const urlToken = urlParams.get('token');
+                if (quizConfig.group === null) {
+                    tokenValue = urlToken || '';
+                    await onTokenVerified();
+                    return;
+                }
                 if (!urlToken || urlToken.trim() === '') {
                     tokenInputArea.style.display = 'block';
                     return;
@@ -682,7 +693,6 @@
                 }
             }
             
-            // 初始化事件
             document.addEventListener('DOMContentLoaded', async () => {
                 const isQuizValid = await fetchQuizConfig();
                 if (!isQuizValid) {
@@ -693,13 +703,10 @@
                 tokenBtn.addEventListener('click', submitToken);
                 tokenInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') submitToken(); });
                 
-                // 提交按钮改为打开确认弹窗
                 submitBtn.addEventListener('click', showConfirmModal);
                 
-                // 弹窗事件
                 modalCancelBtn.addEventListener('click', hideConfirmModal);
                 modalConfirmBtn.addEventListener('click', onConfirmSubmit);
-                // 点击遮罩层关闭
                 confirmModal.addEventListener('click', (e) => {
                     if (e.target === confirmModal) hideConfirmModal();
                 });

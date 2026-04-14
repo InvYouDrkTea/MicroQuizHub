@@ -84,11 +84,17 @@
             }
         }
         
-        function validateQuizConfig(data) {
-            if (!data.hasOwnProperty('paper') || typeof data.paper !== 'string' || data.paper.trim() === '') return false;
-            if (!data.hasOwnProperty('allow_resubmit') || typeof data.allow_resubmit !== 'boolean') return false;
-            // deadline 字段不再需要，但保留校验以便兼容存在该字段的情况，但不做截止判断
-            return true;
+        function normalizeQuizConfig(data) {
+            if (typeof data.id !== 'string' || typeof data.paper !== 'string' || data.paper.trim() === '') {
+                return null;
+            }
+            return {
+                id: data.id,
+                paper: data.paper,
+                group: (data.hasOwnProperty('group') && data.group !== null && typeof data.group === 'string') ? data.group : null,
+                deadline: (data.hasOwnProperty('deadline') && data.deadline !== null) ? Number(data.deadline) : null,
+                allow_resubmit: (data.hasOwnProperty('allow_resubmit') && typeof data.allow_resubmit === 'boolean') ? data.allow_resubmit : false
+            };
         }
         
         async function fetchQuizConfig() {
@@ -123,20 +129,28 @@
                     return false;
                 }
                 const data = await response.json();
-                if (!validateQuizConfig(data)) {
+                const normalized = normalizeQuizConfig(data);
+                if (!normalized) {
                     quizStatusMessageDiv.className = 'quiz-status-message';
                     quizStatusMessageDiv.textContent = '测验数据异常';
                     tokenInputArea.style.display = 'none';
                     tokenBtn.disabled = true;
                     return false;
                 }
-                quizConfig = {
-                    paper: data.paper,
-                    allow_resubmit: data.allow_resubmit,
-                    deadline: data.deadline
-                };
-                // 结果页面不进行截止校验，直接显示
+                quizConfig = normalized;
+                
                 quizStatusMessageDiv.style.display = 'none';
+                
+                // ★ group 为 null 时不允许查询结果
+                if (quizConfig.group === null) {
+                    quizStatusMessageDiv.style.display = 'block';
+                    quizStatusMessageDiv.className = 'quiz-status-message';
+                    quizStatusMessageDiv.textContent = '当前测验不允许查询结果';
+                    tokenInputArea.style.display = 'none';
+                    tokenBtn.disabled = true;
+                    return false;
+                }
+                
                 tokenInputArea.style.display = 'block';
                 tokenBtn.disabled = false;
                 return true;
@@ -150,58 +164,80 @@
             }
         }
         
-        // 获取结果：返回统一格式 { success: boolean, data?: object, code?: number, message?: string }
         async function fetchResult(token, silent = false) {
             try {
                 const url = `/result/${quizId}?token=${encodeURIComponent(token)}`;
                 const response = await fetch(url);
                 
-                // 400: token 无效等
                 if (response.status === 400) {
                     let errorMsg = '请求异常';
                     try {
                         const data = await response.json();
                         errorMsg = data.message || '请求异常';
                     } catch(e) { }
-                    if (!silent) showNotification(errorMsg, 'error');
+                    if (!silent) {
+                        quizStatusMessageDiv.style.display = 'block';
+                        quizStatusMessageDiv.className = 'quiz-status-message';
+                        quizStatusMessageDiv.textContent = errorMsg;
+                    }
                     return { success: false, code: 1, message: errorMsg };
                 }
-                // 404: 测验不存在或结果不存在
                 if (response.status === 404) {
                     let errorMsg = '暂无测验结果';
                     try {
                         const data = await response.json();
                         errorMsg = data.message || '暂无测验结果';
                     } catch(e) { }
-                    if (!silent) showNotification(errorMsg, 'error');
+                    if (!silent) {
+                        quizStatusMessageDiv.style.display = 'block';
+                        quizStatusMessageDiv.className = 'quiz-status-message';
+                        quizStatusMessageDiv.textContent = errorMsg;
+                    }
                     return { success: false, code: 2, message: errorMsg };
                 }
-                // 500: 服务器错误
                 if (response.status === 500) {
-                    if (!silent) showNotification('获取结果失败：服务器异常', 'error');
+                    if (!silent) {
+                        quizStatusMessageDiv.style.display = 'block';
+                        quizStatusMessageDiv.className = 'quiz-status-message';
+                        quizStatusMessageDiv.textContent = '获取结果失败：服务器异常';
+                    }
                     return { success: false, code: -1 };
                 }
                 if (!response.ok) {
-                    if (!silent) showNotification('获取结果失败：请求异常', 'error');
+                    if (!silent) {
+                        quizStatusMessageDiv.style.display = 'block';
+                        quizStatusMessageDiv.className = 'quiz-status-message';
+                        quizStatusMessageDiv.textContent = '获取结果失败：请求异常';
+                    }
                     return { success: false, code: -1 };
                 }
                 
                 const data = await response.json();
-                // 后端修改后：直接返回匹配 token 的条目对象，格式为 { token: string, result: array }
                 if (data && typeof data === 'object' && Array.isArray(data.result)) {
-                    // 检查返回的 token 是否匹配（理论上已经匹配）
                     if (data.token !== token) {
-                        if (!silent) showNotification('返回数据与令牌不匹配', 'error');
+                        if (!silent) {
+                            quizStatusMessageDiv.style.display = 'block';
+                            quizStatusMessageDiv.className = 'quiz-status-message';
+                            quizStatusMessageDiv.textContent = '返回数据与令牌不匹配';
+                        }
                         return { success: false, code: -1 };
                     }
                     return { success: true, data: data };
                 } else {
-                    if (!silent) showNotification('结果数据格式异常', 'error');
+                    if (!silent) {
+                        quizStatusMessageDiv.style.display = 'block';
+                        quizStatusMessageDiv.className = 'quiz-status-message';
+                        quizStatusMessageDiv.textContent = '结果数据格式异常';
+                    }
                     return { success: false, code: -1 };
                 }
             } catch (err) {
                 console.error('Fetch result error:', err);
-                if (!silent) showNotification(`获取结果失败：${err.message}`, 'error');
+                if (!silent) {
+                    quizStatusMessageDiv.style.display = 'block';
+                    quizStatusMessageDiv.className = 'quiz-status-message';
+                    quizStatusMessageDiv.textContent = `获取结果失败：${err.message}`;
+                }
                 return { success: false, code: -1 };
             }
         }
@@ -266,16 +302,14 @@
             }
         }
         
-        // 渲染结果，传入 entry.result 数组（每个元素包含 answer 和 mark）
         function renderResultAnswerSheet(resultArray) {
             answerItemsContainer.innerHTML = '';
-            // 计算总分
             let totalScore = 0;
             for (let i = 0; i < resultArray.length; i++) {
                 const mark = resultArray[i].mark;
                 if (typeof mark === 'number' && !isNaN(mark)) totalScore += mark;
             }
-            resultTitle.textContent = `${tokenValue}，总分：${totalScore}`;
+            resultTitle.textContent = `${tokenValue || '访客'}，总分：${totalScore}`;
             
             answerSheet.forEach((item, idx) => {
                 const resultItem = resultArray[idx] || { answer: null, mark: 0 };
@@ -299,7 +333,6 @@
                         const radio = document.createElement('input');
                         radio.type = 'radio';
                         radio.disabled = true;
-                        // userAnswer 可能是数字索引，也可能是选项文本（但按设计应为索引）
                         if (userAnswer === optIdx || userAnswer === String(optIdx)) radio.checked = true;
                         const label = document.createElement('label');
                         label.textContent = opt;
@@ -315,7 +348,6 @@
                     if (Array.isArray(userAnswer)) {
                         selectedSet = new Set(userAnswer.map(v => String(v)));
                     } else if (typeof userAnswer === 'string') {
-                        // 兼容可能出现的逗号分隔字符串
                         selectedSet = new Set(userAnswer.split(',').map(s => s.trim()));
                     }
                     (item.option || []).forEach((opt, optIdx) => {
@@ -398,13 +430,12 @@
                     tokenContainer.style.display = 'block';
                     tokenBtn.disabled = false;
                     tokenBtn.textContent = '验证';
-                    tokenInputArea.style.display = 'block';
-                    quizStatusMessageDiv.style.display = 'none';
+                    tokenInputArea.style.display = (quizConfig.group === null) ? 'none' : 'block';
+                    quizStatusMessageDiv.style.display = 'block';
                     return;
                 }
-                // resultResp.data 是匹配 token 的条目，包含 .result 数组
                 const entry = resultResp.data;
-                const resultArray = entry.result;  // 每个元素 { answer, mark }
+                const resultArray = entry.result;
                 
                 const paperId = quizConfig.paper;
                 if (!paperId) throw new Error('Missing paper info');
@@ -429,25 +460,27 @@
                 mainContainer.style.display = 'flex';
             } catch (err) {
                 console.error('Loading error:', err);
-                showNotification('加载试卷或结果失败：' + (err.message || '未知错误'), 'error');
                 loadingContainer.style.display = 'none';
                 tokenContainer.style.display = 'block';
+                quizStatusMessageDiv.style.display = 'block';
+                quizStatusMessageDiv.className = 'quiz-status-message';
+                quizStatusMessageDiv.textContent = '加载试卷或结果失败：' + (err.message || '未知错误');
                 tokenBtn.disabled = false;
                 tokenBtn.textContent = '验证';
-                tokenInputArea.style.display = 'block';
-                quizStatusMessageDiv.style.display = 'none';
+                tokenInputArea.style.display = (quizConfig.group === null) ? 'none' : 'block';
             }
         }
         
         async function submitToken() {
-            // 清除可能存在的 url token 无效提示框
             quizStatusMessageDiv.style.display = 'none';
             quizStatusMessageDiv.textContent = '';
             quizStatusMessageDiv.className = 'quiz-status-message info';
             
             const inputToken = tokenInput.value.trim();
             if (!inputToken) {
-                showNotification('请输入访问令牌', 'error');
+                quizStatusMessageDiv.style.display = 'block';
+                quizStatusMessageDiv.className = 'quiz-status-message';
+                quizStatusMessageDiv.textContent = '请输入访问令牌';
                 return;
             }
             tokenBtn.disabled = true;
@@ -461,6 +494,8 @@
         async function autoFetchAndLoad() {
             const urlParams = new URLSearchParams(window.location.search);
             const urlToken = urlParams.get('token');
+            
+            // 已在 fetchQuizConfig 中处理 group === null 的情况，此处不会再调用
             if (!urlToken || urlToken.trim() === '') {
                 tokenInputArea.style.display = 'block';
                 return;
@@ -499,11 +534,12 @@
                     tokenContainer.style.display = 'none';
                 } catch (err) {
                     console.error('Loading error:', err);
-                    showNotification('加载试卷或结果失败：' + (err.message || '未知错误'), 'error');
                     loadingContainer.style.display = 'none';
                     tokenContainer.style.display = 'block';
+                    quizStatusMessageDiv.style.display = 'block';
+                    quizStatusMessageDiv.className = 'quiz-status-message';
+                    quizStatusMessageDiv.textContent = '加载试卷或结果失败：' + (err.message || '未知错误');
                     tokenInputArea.style.display = 'block';
-                    quizStatusMessageDiv.style.display = 'none';
                 }
             } else {
                 loadingContainer.style.display = 'none';
@@ -518,7 +554,6 @@
                 tokenInputArea.style.display = 'block';
                 tokenBtn.disabled = false;
                 tokenBtn.textContent = '验证';
-                // 清除 URL 中的 token 参数
                 const newUrl = window.location.pathname + '?quiz=' + quizId;
                 window.history.replaceState({}, '', newUrl);
             }
