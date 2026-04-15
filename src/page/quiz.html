@@ -9,6 +9,8 @@
     <script defer src="https://cdn.bootcdn.net/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
     <script defer src="https://cdn.bootcdn.net/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
     <script src="https://cdn.bootcdn.net/ajax/libs/marked/4.3.0/marked.min.js"></script>
+    <!-- 引入 Fabric.js (国内 CDN) -->
+    <script src="https://cdn.bootcdn.net/ajax/libs/fabric.js/5.3.0/fabric.min.js"></script>
     <link rel="stylesheet" href="/asset/style.css">
 </head>
 <body>
@@ -68,6 +70,9 @@
             let paperMimeType = '';
             let allowResubmit = false;
             let autoSaveInterval = null;
+            
+            // 存储每个 graphic 题目的 Fabric.js 画布实例，便于提交时导出 Base64
+            const graphicInstances = new Map(); // key: questionIndex, value: fabric.Canvas
             
             const tokenContainer = document.getElementById('tokenContainer');
             const loadingContainer = document.getElementById('loadingContainer');
@@ -315,12 +320,19 @@
                         throw new Error('Paper data error: missing or invalid paper field');
                     for (let i = 0; i < data.paper.length; i++) {
                         const item = data.paper[i];
-                        if (!item.type || !['single_selection', 'multiple_selection', 'single_line', 'multiple_line'].includes(item.type))
+                        // 允许 graphic 类型
+                        if (!item.type || !['single_selection', 'multiple_selection', 'single_line', 'multiple_line', 'graphic'].includes(item.type))
                             throw new Error(`Paper data error: invalid type for question ${i+1}`);
                         if (typeof item.prompt !== 'string')
                             throw new Error(`Paper data error: missing prompt for question ${i+1}`);
                         if ((item.type === 'single_selection' || item.type === 'multiple_selection') && (!Array.isArray(item.option) || item.option.length === 0))
                             throw new Error(`Paper data error: missing options for question ${i+1}`);
+                        // graphic 类型需要 prototype 和 mime_type（可为空字符串或 null，但字段应存在）
+                        if (item.type === 'graphic') {
+                            // 确保字段存在，但允许为空
+                            if (!item.hasOwnProperty('prototype')) item.prototype = null;
+                            if (!item.hasOwnProperty('mime_type')) item.mime_type = 'image/png';
+                        }
                     }
                     return data;
                 } catch (err) {
@@ -358,78 +370,281 @@
                 }
             }
             
-            function tryRestoreAnswers() {
-                if (!quizId || !tokenValue) return false;
-                const storageKey = `quiz_auto_save_${quizId}_${tokenValue}`;
-                const saved = localStorage.getItem(storageKey);
-                if (!saved) return false;
-                try {
-                    const data = JSON.parse(saved);
-                    if (data.quizId === quizId && data.token === tokenValue && Array.isArray(data.answers) && data.answers.length === answerSheet.length) {
-                        userAnswers = data.answers.slice();
-                        for (let i = 0; i < answerSheet.length; i++) {
-                            const answer = userAnswers[i];
-                            const itemType = answerSheet[i].type;
-                            const container = document.querySelector(`.answer-item[data-question-index="${i}"]`);
-                            if (!container) continue;
-                            if (itemType === 'single_selection' && answer !== null && answer !== undefined) {
-                                const radio = container.querySelector(`input[name="question_${i}"][value="${answer}"]`);
-                                if (radio) radio.checked = true;
-                            } else if (itemType === 'multiple_selection' && Array.isArray(answer)) {
-                                answer.forEach(optIdx => {
-                                    const checkbox = container.querySelector(`input[name="question_${i}"][value="${optIdx}"]`);
-                                    if (checkbox) checkbox.checked = true;
-                                });
-                            } else if ((itemType === 'single_line' || itemType === 'multiple_line') && typeof answer === 'string') {
-                                const input = container.querySelector(itemType === 'single_line' ? '.text-input' : '.textarea-input');
-                                if (input) {
-                                    input.value = answer;
-                                    input.dispatchEvent(new Event('input', { bubbles: true }));
-                                }
-                            }
-                        }
-                        updateAutoSaveStatus(true);
-                        return true;
+            // ---------- 图形题渲染 ----------
+            function renderGraphic(container, item, index) {
+                const graphicDiv = document.createElement('div');
+                graphicDiv.className = 'graphic-container';
+                
+                // 工具栏
+                const toolbar = document.createElement('div');
+                toolbar.className = 'graphic-toolbar';
+                
+                // 工具按钮组
+                const createToolButton = (text, title, active = false) => {
+                    const btn = document.createElement('button');
+                    btn.textContent = text;
+                    btn.title = title;
+                    if (active) btn.classList.add('active');
+                    return btn;
+                };
+                
+                // 模式按钮
+                const btnSelect = createToolButton('选择', '选择/移动对象 (V)');
+                const btnDraw = createToolButton('画笔', '自由绘制 (P)', true);
+                const btnLine = createToolButton('直线', '绘制直线 (L)');
+                const btnRect = createToolButton('矩形', '绘制矩形 (R)');
+                const btnCircle = createToolButton('圆形', '绘制圆形 (C)');
+                const btnText = createToolButton('文本', '添加文本 (T)');
+                
+                // 颜色选择
+                const colorPicker = document.createElement('input');
+                colorPicker.type = 'color';
+                colorPicker.value = '#000000';
+                colorPicker.title = '颜色';
+                
+                // 线宽滑块
+                const strokeWidthInput = document.createElement('input');
+                strokeWidthInput.type = 'range';
+                strokeWidthInput.min = '1';
+                strokeWidthInput.max = '20';
+                strokeWidthInput.value = '3';
+                strokeWidthInput.title = '线宽';
+                
+                // 操作按钮
+                const btnUndo = createToolButton('↩', '撤销 (Ctrl+Z)');
+                const btnRedo = createToolButton('↪', '重做 (Ctrl+Y)');
+                const btnClear = createToolButton('清空', '清空画布');
+                
+                // 组装工具栏
+                const group1 = document.createElement('span');
+                group1.className = 'toolbar-group';
+                group1.append(btnSelect, btnDraw, btnLine, btnRect, btnCircle, btnText);
+                
+                const group2 = document.createElement('span');
+                group2.className = 'toolbar-group';
+                group2.append(colorPicker, strokeWidthInput);
+                
+                const group3 = document.createElement('span');
+                group3.className = 'toolbar-group';
+                group3.append(btnUndo, btnRedo, btnClear);
+                
+                toolbar.append(group1, group2, group3);
+                graphicDiv.appendChild(toolbar);
+                
+                // 画布包装
+                const wrapper = document.createElement('div');
+                wrapper.className = 'graphic-canvas-wrapper';
+                
+                const canvasEl = document.createElement('canvas');
+                canvasEl.className = 'graphic-canvas';
+                // 设置画布尺寸（宽度固定600，高度按比例？这里由CSS控制宽度100%，高度自适应）
+                canvasEl.width = 600;
+                canvasEl.height = 400;
+                
+                wrapper.appendChild(canvasEl);
+                graphicDiv.appendChild(wrapper);
+                container.appendChild(graphicDiv);
+                
+                // 初始化 Fabric.js
+                const canvas = new fabric.Canvas(canvasEl, {
+                    selection: true,
+                    preserveObjectStacking: true
+                });
+                
+                // 存储画布实例
+                graphicInstances.set(index, canvas);
+                
+                // 当前模式管理
+                let currentMode = 'draw'; // draw, select, line, rect, circle, text
+                let isDrawing = false;
+                let startPoint = null;
+                let tempShape = null;
+                
+                // 更新按钮激活状态
+                const setActiveMode = (mode) => {
+                    currentMode = mode;
+                    [btnSelect, btnDraw, btnLine, btnRect, btnCircle, btnText].forEach(btn => btn.classList.remove('active'));
+                    if (mode === 'select') btnSelect.classList.add('active');
+                    else if (mode === 'draw') btnDraw.classList.add('active');
+                    else if (mode === 'line') btnLine.classList.add('active');
+                    else if (mode === 'rect') btnRect.classList.add('active');
+                    else if (mode === 'circle') btnCircle.classList.add('active');
+                    else if (mode === 'text') btnText.classList.add('active');
+                    
+                    canvas.isDrawingMode = (mode === 'draw');
+                    canvas.selection = (mode === 'select');
+                    canvas.forEachObject(obj => obj.selectable = (mode === 'select'));
+                    canvas.renderAll();
+                };
+                
+                // 获取当前样式
+                const getCurrentStyle = () => ({
+                    stroke: colorPicker.value,
+                    strokeWidth: parseInt(strokeWidthInput.value, 10),
+                    fill: 'transparent'
+                });
+                
+                // 设置画布自由绘制画笔
+                canvas.freeDrawingBrush.color = colorPicker.value;
+                canvas.freeDrawingBrush.width = parseInt(strokeWidthInput.value, 10);
+                
+                colorPicker.addEventListener('change', () => {
+                    canvas.freeDrawingBrush.color = colorPicker.value;
+                });
+                strokeWidthInput.addEventListener('input', () => {
+                    canvas.freeDrawingBrush.width = parseInt(strokeWidthInput.value, 10);
+                });
+                
+                // 加载背景图（如果有）
+                if (item.prototype) {
+                    fabric.Image.fromURL(item.prototype, (img) => {
+                        img.set({
+                            selectable: false,
+                            evented: false,
+                            hasControls: false,
+                            lockMovementX: true,
+                            lockMovementY: true,
+                            hoverCursor: 'default'
+                        });
+                        canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas), {
+                            scaleX: canvas.width / img.width,
+                            scaleY: canvas.height / img.height
+                        });
+                    }, undefined, { crossOrigin: 'anonymous' });
+                }
+                
+                // 工具按钮事件
+                btnSelect.addEventListener('click', () => setActiveMode('select'));
+                btnDraw.addEventListener('click', () => setActiveMode('draw'));
+                btnLine.addEventListener('click', () => setActiveMode('line'));
+                btnRect.addEventListener('click', () => setActiveMode('rect'));
+                btnCircle.addEventListener('click', () => setActiveMode('circle'));
+                btnText.addEventListener('click', () => setActiveMode('text'));
+                
+                btnUndo.addEventListener('click', () => {
+                    if (canvas._undoStack && canvas._undoStack.length > 0) {
+                        canvas.undo();
                     }
-                } catch (e) {
-                    console.warn('Failed to restore answers:', e);
-                }
-                return false;
+                });
+                btnRedo.addEventListener('click', () => {
+                    if (canvas._redoStack && canvas._redoStack.length > 0) {
+                        canvas.redo();
+                    }
+                });
+                btnClear.addEventListener('click', () => {
+                    canvas.getObjects().forEach(obj => { if (obj !== canvas.backgroundImage) canvas.remove(obj); });
+                    canvas.renderAll();
+                });
+                
+                // 自定义绘图逻辑（直线、矩形、圆形、文本）
+                canvas.on('mouse:down', (opt) => {
+                    if (currentMode === 'select' || currentMode === 'draw') return;
+                    const pointer = canvas.getPointer(opt.e);
+                    startPoint = { x: pointer.x, y: pointer.y };
+                    isDrawing = true;
+                    
+                    const style = getCurrentStyle();
+                    if (currentMode === 'line') {
+                        tempShape = new fabric.Line([pointer.x, pointer.y, pointer.x, pointer.y], {
+                            stroke: style.stroke,
+                            strokeWidth: style.strokeWidth,
+                            selectable: false,
+                            evented: false
+                        });
+                    } else if (currentMode === 'rect') {
+                        tempShape = new fabric.Rect({
+                            left: pointer.x,
+                            top: pointer.y,
+                            width: 0,
+                            height: 0,
+                            stroke: style.stroke,
+                            strokeWidth: style.strokeWidth,
+                            fill: 'transparent',
+                            selectable: false,
+                            evented: false
+                        });
+                    } else if (currentMode === 'circle') {
+                        tempShape = new fabric.Circle({
+                            left: pointer.x,
+                            top: pointer.y,
+                            radius: 0,
+                            stroke: style.stroke,
+                            strokeWidth: style.strokeWidth,
+                            fill: 'transparent',
+                            selectable: false,
+                            evented: false
+                        });
+                    }
+                    if (tempShape) {
+                        canvas.add(tempShape);
+                    }
+                });
+                
+                canvas.on('mouse:move', (opt) => {
+                    if (!isDrawing || !tempShape) return;
+                    const pointer = canvas.getPointer(opt.e);
+                    if (currentMode === 'line') {
+                        tempShape.set({ x2: pointer.x, y2: pointer.y });
+                    } else if (currentMode === 'rect') {
+                        tempShape.set({
+                            width: Math.abs(pointer.x - startPoint.x),
+                            height: Math.abs(pointer.y - startPoint.y)
+                        });
+                        if (pointer.x < startPoint.x) tempShape.set({ left: pointer.x });
+                        if (pointer.y < startPoint.y) tempShape.set({ top: pointer.y });
+                    } else if (currentMode === 'circle') {
+                        const radius = Math.sqrt(Math.pow(pointer.x - startPoint.x, 2) + Math.pow(pointer.y - startPoint.y, 2));
+                        tempShape.set({ radius: radius });
+                    }
+                    canvas.renderAll();
+                });
+                
+                canvas.on('mouse:up', () => {
+                    if (isDrawing && tempShape) {
+                        tempShape.set({ selectable: true, evented: true });
+                        canvas.setActiveObject(tempShape);
+                        tempShape = null;
+                    }
+                    isDrawing = false;
+                    startPoint = null;
+                });
+                
+                // 文本工具：点击添加文本
+                canvas.on('mouse:dblclick', () => {
+                    if (currentMode !== 'text') return;
+                    const pointer = canvas.getPointer(opt);
+                    const text = new fabric.IText('文本', {
+                        left: pointer.x,
+                        top: pointer.y,
+                        fill: colorPicker.value,
+                        fontSize: 20,
+                        fontFamily: 'Microsoft YaHei'
+                    });
+                    canvas.add(text);
+                    canvas.setActiveObject(text);
+                    setActiveMode('select');
+                });
+                
+                // 初始化模式
+                setActiveMode('draw');
+                
+                // 将画布实例的序列化数据与答案关联（会在 autoSaveAnswers 中处理）
+                // 不需要额外操作
             }
             
-            function autoSaveAnswers() {
-                if (!quizId || !tokenValue) return;
-                const storageKey = `quiz_auto_save_${quizId}_${tokenValue}`;
-                const saveData = { quizId, token: tokenValue, answers: userAnswers, timestamp: Date.now() };
-                try {
-                    localStorage.setItem(storageKey, JSON.stringify(saveData));
-                    updateAutoSaveStatus(true);
-                } catch (e) {
-                    console.error('Auto-save failed:', e);
-                    updateAutoSaveStatus(false);
-                }
-            }
-            
-            function stopAutoSave() {
-                if (autoSaveInterval) clearInterval(autoSaveInterval);
-                autoSaveInterval = null;
-            }
-            
-            function startAutoSave() {
-                stopAutoSave();
-                updateAutoSaveStatus(true);
-                autoSaveInterval = setInterval(autoSaveAnswers, 30000);
-            }
-            
+            // ---------- 其他渲染函数保持不变 ----------
             function renderAnswerSheetFromConfig() {
                 answerItemsContainer.innerHTML = '';
                 userAnswers = new Array(answerSheet.length);
+                graphicInstances.clear();
+                
                 answerSheet.forEach((item, idx) => {
                     switch (item.type) {
                         case 'single_selection': userAnswers[idx] = null; break;
                         case 'multiple_selection': userAnswers[idx] = []; break;
                         case 'single_line':
                         case 'multiple_line': userAnswers[idx] = ''; break;
+                        case 'graphic': userAnswers[idx] = null; break;
                         default: userAnswers[idx] = null;
                     }
                     const answerItem = document.createElement('div');
@@ -440,14 +655,18 @@
                     title.className = 'answer-item-title';
                     title.textContent = item.prompt;
                     answerItem.appendChild(title);
+                    
                     if (item.type === 'single_selection') renderSingleSelection(answerItem, item, idx);
                     else if (item.type === 'multiple_selection') renderMultipleSelection(answerItem, item, idx);
                     else if (item.type === 'single_line') renderSingleLine(answerItem, item, idx);
                     else if (item.type === 'multiple_line') renderMultipleLine(answerItem, item, idx);
+                    else if (item.type === 'graphic') renderGraphic(answerItem, item, idx);
+                    
                     answerItemsContainer.appendChild(answerItem);
                 });
             }
             
+            // 单选、多选、单行、多行渲染函数保持不变...
             function renderSingleSelection(container, item, index) {
                 const optionsDiv = document.createElement('div');
                 optionsDiv.className = 'options-container';
@@ -552,7 +771,7 @@
                 preview.innerHTML = '';
                 if (!latexCode) return;
                 try {
-                    if (typeof katex !== 'undefined')
+                    if (typeof katez !== 'undefined')
                         katex.render(latexCode, preview, { throwOnError: false, displayMode });
                     else
                         preview.innerHTML = '<span style="color:#f44336;">LaTeX library not loaded</span>';
@@ -561,11 +780,114 @@
                 }
             }
             
+            // 草稿恢复：支持 graphic 题
+            function tryRestoreAnswers() {
+                if (!quizId || !tokenValue) return false;
+                const storageKey = `quiz_auto_save_${quizId}_${tokenValue}`;
+                const saved = localStorage.getItem(storageKey);
+                if (!saved) return false;
+                try {
+                    const data = JSON.parse(saved);
+                    if (data.quizId === quizId && data.token === tokenValue && Array.isArray(data.answers) && data.answers.length === answerSheet.length) {
+                        userAnswers = data.answers.slice();
+                        for (let i = 0; i < answerSheet.length; i++) {
+                            const answer = userAnswers[i];
+                            const itemType = answerSheet[i].type;
+                            const container = document.querySelector(`.answer-item[data-question-index="${i}"]`);
+                            if (!container) continue;
+                            
+                            if (itemType === 'single_selection' && answer !== null && answer !== undefined) {
+                                const radio = container.querySelector(`input[name="question_${i}"][value="${answer}"]`);
+                                if (radio) radio.checked = true;
+                            } else if (itemType === 'multiple_selection' && Array.isArray(answer)) {
+                                answer.forEach(optIdx => {
+                                    const checkbox = container.querySelector(`input[name="question_${i}"][value="${optIdx}"]`);
+                                    if (checkbox) checkbox.checked = true;
+                                });
+                            } else if ((itemType === 'single_line' || itemType === 'multiple_line') && typeof answer === 'string') {
+                                const input = container.querySelector(itemType === 'single_line' ? '.text-input' : '.textarea-input');
+                                if (input) {
+                                    input.value = answer;
+                                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                                }
+                            } else if (itemType === 'graphic' && answer && typeof answer === 'object' && answer.type === 'fabric') {
+                                const canvas = graphicInstances.get(i);
+                                if (canvas) {
+                                    canvas.loadFromJSON(answer.data, () => {
+                                        canvas.renderAll();
+                                    });
+                                }
+                            }
+                        }
+                        updateAutoSaveStatus(true);
+                        return true;
+                    }
+                } catch (e) {
+                    console.warn('Failed to restore answers:', e);
+                }
+                return false;
+            }
+            
+            function autoSaveAnswers() {
+                if (!quizId || !tokenValue) return;
+                const storageKey = `quiz_auto_save_${quizId}_${tokenValue}`;
+                // 构建用于保存的答案副本，graphic 题保存 Fabric JSON
+                const answersForSave = userAnswers.map((ans, idx) => {
+                    const item = answerSheet[idx];
+                    if (item && item.type === 'graphic') {
+                        const canvas = graphicInstances.get(idx);
+                        if (canvas) {
+                            return { type: 'fabric', data: canvas.toJSON() };
+                        }
+                        return null;
+                    }
+                    return ans;
+                });
+                
+                const saveData = { quizId, token: tokenValue, answers: answersForSave, timestamp: Date.now() };
+                try {
+                    localStorage.setItem(storageKey, JSON.stringify(saveData));
+                    updateAutoSaveStatus(true);
+                } catch (e) {
+                    console.error('Auto-save failed:', e);
+                    updateAutoSaveStatus(false);
+                }
+            }
+            
+            function stopAutoSave() {
+                if (autoSaveInterval) clearInterval(autoSaveInterval);
+                autoSaveInterval = null;
+            }
+            
+            function startAutoSave() {
+                stopAutoSave();
+                updateAutoSaveStatus(true);
+                autoSaveInterval = setInterval(autoSaveAnswers, 30000);
+            }
+            
             async function performSubmit() {
                 submitBtn.disabled = true;
                 submitBtn.textContent = '正在提交';
                 
-                const result = await postRequest('/submit', { quiz: quizId, token: tokenValue, answer: userAnswers }, '提交', true);
+                // 构建提交答案，将 graphic 题转换为 Base64
+                const submitAnswers = [];
+                for (let i = 0; i < userAnswers.length; i++) {
+                    const item = answerSheet[i];
+                    if (item && item.type === 'graphic') {
+                        const canvas = graphicInstances.get(i);
+                        if (canvas) {
+                            const mimeType = item.mime_type || 'image/png';
+                            const dataURL = canvas.toDataURL(mimeType);
+                            submitAnswers.push(dataURL);
+                        } else {
+                            submitAnswers.push(null);
+                        }
+                    } else {
+                        submitAnswers.push(userAnswers[i]);
+                    }
+                }
+                
+                const result = await postRequest('/submit', { quiz: quizId, token: tokenValue, answer: submitAnswers }, '提交', true);
                 
                 if (result.success) {
                     if (!allowResubmit) {
@@ -633,7 +955,6 @@
                     quizStatusMessageDiv.style.display = 'block';
                     quizStatusMessageDiv.className = 'quiz-status-message';
                     quizStatusMessageDiv.textContent = '试题加载失败：' + (err.message || '未知错误');
-                    // ★ 隐藏 token 输入区域
                     tokenInputArea.style.display = 'none';
                     tokenBtn.disabled = true;
                 }
