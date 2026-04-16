@@ -9,11 +9,11 @@
     <script defer src="https://cdn.bootcdn.net/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
     <script defer src="https://cdn.bootcdn.net/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
     <script src="https://cdn.bootcdn.net/ajax/libs/marked/4.3.0/marked.min.js"></script>
-    <!-- 引入 Fabric.js (国内 CDN) -->
     <script src="https://cdn.bootcdn.net/ajax/libs/fabric.js/5.3.0/fabric.min.js"></script>
     <link rel="stylesheet" href="/asset/style.css">
 </head>
 <body>
+    <!-- 页面结构保持不变（与提问中相同） -->
     <div class="token-container" id="tokenContainer">
         <h2 class="token-title">测验作答</h2>
         <div id="quizStatusMessage" class="quiz-status-message info">正在校验测验数据</div>
@@ -71,8 +71,7 @@
             let allowResubmit = false;
             let autoSaveInterval = null;
             
-            // 存储每个 graphic 题目的 Fabric.js 画布实例，便于提交时导出 Base64
-            const graphicInstances = new Map(); // key: questionIndex, value: fabric.Canvas
+            const graphicInstances = new Map();
             
             const tokenContainer = document.getElementById('tokenContainer');
             const loadingContainer = document.getElementById('loadingContainer');
@@ -132,12 +131,20 @@
                 if (typeof data.id !== 'string' || typeof data.paper !== 'string' || data.paper.trim() === '') {
                     return null;
                 }
+                const group = (data.hasOwnProperty('group') && data.group !== null && typeof data.group === 'string') ? data.group : null;
+                // 修改：如果 group 为 null，强制 allow_resubmit 为 true
+                let allowResubmit;
+                if (group === null) {
+                    allowResubmit = true;
+                } else {
+                    allowResubmit = (data.hasOwnProperty('allow_resubmit') && typeof data.allow_resubmit === 'boolean') ? data.allow_resubmit : false;
+                }
                 return {
                     id: data.id,
                     paper: data.paper,
-                    group: (data.hasOwnProperty('group') && data.group !== null && typeof data.group === 'string') ? data.group : null,
+                    group: group,
                     deadline: (data.hasOwnProperty('deadline') && data.deadline !== null) ? Number(data.deadline) : null,
-                    allow_resubmit: (data.hasOwnProperty('allow_resubmit') && typeof data.allow_resubmit === 'boolean') ? data.allow_resubmit : false
+                    allow_resubmit: allowResubmit
                 };
             }
             
@@ -320,18 +327,15 @@
                         throw new Error('Paper data error: missing or invalid paper field');
                     for (let i = 0; i < data.paper.length; i++) {
                         const item = data.paper[i];
-                        // 允许 graphic 类型
                         if (!item.type || !['single_selection', 'multiple_selection', 'single_line', 'multiple_line', 'graphic'].includes(item.type))
                             throw new Error(`Paper data error: invalid type for question ${i+1}`);
                         if (typeof item.prompt !== 'string')
                             throw new Error(`Paper data error: missing prompt for question ${i+1}`);
                         if ((item.type === 'single_selection' || item.type === 'multiple_selection') && (!Array.isArray(item.option) || item.option.length === 0))
                             throw new Error(`Paper data error: missing options for question ${i+1}`);
-                        // graphic 类型需要 prototype 和 mime_type（可为空字符串或 null，但字段应存在）
                         if (item.type === 'graphic') {
-                            // 确保字段存在，但允许为空
                             if (!item.hasOwnProperty('prototype')) item.prototype = null;
-                            if (!item.hasOwnProperty('mime_type')) item.mime_type = 'image/png';
+                            if (!item.hasOwnProperty('mime_type')) item.mime_type = 'image/png'; // 仅用于背景图
                         }
                     }
                     return data;
@@ -370,16 +374,14 @@
                 }
             }
             
-            // ---------- 图形题渲染 ----------
+            // ---------- 图形题渲染（含完整撤销/重做） ----------
             function renderGraphic(container, item, index) {
                 const graphicDiv = document.createElement('div');
                 graphicDiv.className = 'graphic-container';
                 
-                // 工具栏
                 const toolbar = document.createElement('div');
                 toolbar.className = 'graphic-toolbar';
                 
-                // 工具按钮组
                 const createToolButton = (text, title, active = false) => {
                     const btn = document.createElement('button');
                     btn.textContent = text;
@@ -388,7 +390,6 @@
                     return btn;
                 };
                 
-                // 模式按钮
                 const btnSelect = createToolButton('选择', '选择/移动对象 (V)');
                 const btnDraw = createToolButton('画笔', '自由绘制 (P)', true);
                 const btnLine = createToolButton('直线', '绘制直线 (L)');
@@ -396,13 +397,11 @@
                 const btnCircle = createToolButton('圆形', '绘制圆形 (C)');
                 const btnText = createToolButton('文本', '添加文本 (T)');
                 
-                // 颜色选择
                 const colorPicker = document.createElement('input');
                 colorPicker.type = 'color';
                 colorPicker.value = '#000000';
                 colorPicker.title = '颜色';
                 
-                // 线宽滑块
                 const strokeWidthInput = document.createElement('input');
                 strokeWidthInput.type = 'range';
                 strokeWidthInput.min = '1';
@@ -410,12 +409,10 @@
                 strokeWidthInput.value = '3';
                 strokeWidthInput.title = '线宽';
                 
-                // 操作按钮
                 const btnUndo = createToolButton('↩', '撤销 (Ctrl+Z)');
                 const btnRedo = createToolButton('↪', '重做 (Ctrl+Y)');
                 const btnClear = createToolButton('清空', '清空画布');
                 
-                // 组装工具栏
                 const group1 = document.createElement('span');
                 group1.className = 'toolbar-group';
                 group1.append(btnSelect, btnDraw, btnLine, btnRect, btnCircle, btnText);
@@ -431,13 +428,11 @@
                 toolbar.append(group1, group2, group3);
                 graphicDiv.appendChild(toolbar);
                 
-                // 画布包装
                 const wrapper = document.createElement('div');
                 wrapper.className = 'graphic-canvas-wrapper';
                 
                 const canvasEl = document.createElement('canvas');
                 canvasEl.className = 'graphic-canvas';
-                // 设置画布尺寸（宽度固定600，高度按比例？这里由CSS控制宽度100%，高度自适应）
                 canvasEl.width = 600;
                 canvasEl.height = 400;
                 
@@ -445,22 +440,93 @@
                 graphicDiv.appendChild(wrapper);
                 container.appendChild(graphicDiv);
                 
-                // 初始化 Fabric.js
                 const canvas = new fabric.Canvas(canvasEl, {
                     selection: true,
                     preserveObjectStacking: true
                 });
                 
-                // 存储画布实例
                 graphicInstances.set(index, canvas);
                 
-                // 当前模式管理
-                let currentMode = 'draw'; // draw, select, line, rect, circle, text
+                // ---------- 历史记录管理 ----------
+                let history = [];
+                let historyIndex = -1;
+                let ignoreSave = false;
+                let backgroundImage = null;
+                
+                function saveState() {
+                    if (ignoreSave) return;
+                    
+                    const bg = canvas.backgroundImage;
+                    canvas.backgroundImage = null;
+                    const json = canvas.toJSON();
+                    canvas.backgroundImage = bg;
+                    
+                    if (historyIndex < history.length - 1) {
+                        history = history.slice(0, historyIndex + 1);
+                    }
+                    history.push(json);
+                    historyIndex++;
+                    
+                    updateUndoRedoButtons();
+                }
+                
+                function loadState(stateJson) {
+                    ignoreSave = true;
+                    const bg = canvas.backgroundImage;
+                    canvas.loadFromJSON(stateJson, () => {
+                        if (bg) {
+                            canvas.setBackgroundImage(bg, canvas.renderAll.bind(canvas));
+                        } else {
+                            canvas.renderAll();
+                        }
+                        ignoreSave = false;
+                        updateUndoRedoButtons();
+                    });
+                }
+                
+                function undo() {
+                    if (historyIndex > 0) {
+                        historyIndex--;
+                        loadState(history[historyIndex]);
+                    }
+                }
+                
+                function redo() {
+                    if (historyIndex < history.length - 1) {
+                        historyIndex++;
+                        loadState(history[historyIndex]);
+                    }
+                }
+                
+                function updateUndoRedoButtons() {
+                    btnUndo.disabled = (historyIndex <= 0);
+                    btnRedo.disabled = (historyIndex >= history.length - 1);
+                }
+                
+                function clearCanvas() {
+                    canvas.getObjects().forEach(obj => {
+                        if (obj !== canvas.backgroundImage) canvas.remove(obj);
+                    });
+                    canvas.renderAll();
+                    saveState();
+                }
+                
+                saveState();
+                
+                canvas.on('object:added', saveState);
+                canvas.on('object:modified', saveState);
+                canvas.on('object:removed', saveState);
+                canvas.on('path:created', saveState);
+                
+                btnUndo.addEventListener('click', undo);
+                btnRedo.addEventListener('click', redo);
+                btnClear.addEventListener('click', clearCanvas);
+                
+                let currentMode = 'draw';
                 let isDrawing = false;
                 let startPoint = null;
                 let tempShape = null;
                 
-                // 更新按钮激活状态
                 const setActiveMode = (mode) => {
                     currentMode = mode;
                     [btnSelect, btnDraw, btnLine, btnRect, btnCircle, btnText].forEach(btn => btn.classList.remove('active'));
@@ -477,14 +543,12 @@
                     canvas.renderAll();
                 };
                 
-                // 获取当前样式
                 const getCurrentStyle = () => ({
                     stroke: colorPicker.value,
                     strokeWidth: parseInt(strokeWidthInput.value, 10),
                     fill: 'transparent'
                 });
                 
-                // 设置画布自由绘制画笔
                 canvas.freeDrawingBrush.color = colorPicker.value;
                 canvas.freeDrawingBrush.width = parseInt(strokeWidthInput.value, 10);
                 
@@ -495,7 +559,7 @@
                     canvas.freeDrawingBrush.width = parseInt(strokeWidthInput.value, 10);
                 });
                 
-                // 加载背景图（如果有）
+                // 背景图加载（mime_type 仅用于背景图）
                 if (item.prototype) {
                     fabric.Image.fromURL(item.prototype, (img) => {
                         img.set({
@@ -506,14 +570,17 @@
                             lockMovementY: true,
                             hoverCursor: 'default'
                         });
-                        canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas), {
+                        canvas.setBackgroundImage(img, () => {
+                            canvas.renderAll();
+                            saveState();
+                        }, {
                             scaleX: canvas.width / img.width,
                             scaleY: canvas.height / img.height
                         });
+                        backgroundImage = img;
                     }, undefined, { crossOrigin: 'anonymous' });
                 }
                 
-                // 工具按钮事件
                 btnSelect.addEventListener('click', () => setActiveMode('select'));
                 btnDraw.addEventListener('click', () => setActiveMode('draw'));
                 btnLine.addEventListener('click', () => setActiveMode('line'));
@@ -521,22 +588,6 @@
                 btnCircle.addEventListener('click', () => setActiveMode('circle'));
                 btnText.addEventListener('click', () => setActiveMode('text'));
                 
-                btnUndo.addEventListener('click', () => {
-                    if (canvas._undoStack && canvas._undoStack.length > 0) {
-                        canvas.undo();
-                    }
-                });
-                btnRedo.addEventListener('click', () => {
-                    if (canvas._redoStack && canvas._redoStack.length > 0) {
-                        canvas.redo();
-                    }
-                });
-                btnClear.addEventListener('click', () => {
-                    canvas.getObjects().forEach(obj => { if (obj !== canvas.backgroundImage) canvas.remove(obj); });
-                    canvas.renderAll();
-                });
-                
-                // 自定义绘图逻辑（直线、矩形、圆形、文本）
                 canvas.on('mouse:down', (opt) => {
                     if (currentMode === 'select' || currentMode === 'draw') return;
                     const pointer = canvas.getPointer(opt.e);
@@ -609,10 +660,9 @@
                     startPoint = null;
                 });
                 
-                // 文本工具：点击添加文本
-                canvas.on('mouse:dblclick', () => {
+                canvas.on('mouse:dblclick', (opt) => {
                     if (currentMode !== 'text') return;
-                    const pointer = canvas.getPointer(opt);
+                    const pointer = canvas.getPointer(opt.e);
                     const text = new fabric.IText('文本', {
                         left: pointer.x,
                         top: pointer.y,
@@ -625,14 +675,10 @@
                     setActiveMode('select');
                 });
                 
-                // 初始化模式
                 setActiveMode('draw');
-                
-                // 将画布实例的序列化数据与答案关联（会在 autoSaveAnswers 中处理）
-                // 不需要额外操作
+                updateUndoRedoButtons();
             }
             
-            // ---------- 其他渲染函数保持不变 ----------
             function renderAnswerSheetFromConfig() {
                 answerItemsContainer.innerHTML = '';
                 userAnswers = new Array(answerSheet.length);
@@ -666,7 +712,6 @@
                 });
             }
             
-            // 单选、多选、单行、多行渲染函数保持不变...
             function renderSingleSelection(container, item, index) {
                 const optionsDiv = document.createElement('div');
                 optionsDiv.className = 'options-container';
@@ -771,7 +816,7 @@
                 preview.innerHTML = '';
                 if (!latexCode) return;
                 try {
-                    if (typeof katez !== 'undefined')
+                    if (typeof katex !== 'undefined')
                         katex.render(latexCode, preview, { throwOnError: false, displayMode });
                     else
                         preview.innerHTML = '<span style="color:#f44336;">LaTeX library not loaded</span>';
@@ -780,7 +825,6 @@
                 }
             }
             
-            // 草稿恢复：支持 graphic 题
             function tryRestoreAnswers() {
                 if (!quizId || !tokenValue) return false;
                 const storageKey = `quiz_auto_save_${quizId}_${tokenValue}`;
@@ -831,7 +875,6 @@
             function autoSaveAnswers() {
                 if (!quizId || !tokenValue) return;
                 const storageKey = `quiz_auto_save_${quizId}_${tokenValue}`;
-                // 构建用于保存的答案副本，graphic 题保存 Fabric JSON
                 const answersForSave = userAnswers.map((ans, idx) => {
                     const item = answerSheet[idx];
                     if (item && item.type === 'graphic') {
@@ -869,16 +912,14 @@
                 submitBtn.disabled = true;
                 submitBtn.textContent = '正在提交';
                 
-                // 构建提交答案，将 graphic 题转换为 Base64
+                // 构建提交答案，graphic 题提交 Fabric JSON 对象（非 Base64 图片）
                 const submitAnswers = [];
                 for (let i = 0; i < userAnswers.length; i++) {
                     const item = answerSheet[i];
                     if (item && item.type === 'graphic') {
                         const canvas = graphicInstances.get(i);
                         if (canvas) {
-                            const mimeType = item.mime_type || 'image/png';
-                            const dataURL = canvas.toDataURL(mimeType);
-                            submitAnswers.push(dataURL);
+                            submitAnswers.push(canvas.toJSON());
                         } else {
                             submitAnswers.push(null);
                         }
