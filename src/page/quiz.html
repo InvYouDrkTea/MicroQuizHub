@@ -9,7 +9,7 @@
     <script defer src="https://cdn.bootcdn.net/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
     <script defer src="https://cdn.bootcdn.net/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
     <script src="https://cdn.bootcdn.net/ajax/libs/marked/4.3.0/marked.min.js"></script>
-    <script src="https://cdn.bootcdn.net/ajax/libs/fabric.js/5.3.0/fabric.min.js"></script>
+    <script src="https://unpkg.com/fabric-with-erasing@1.0.1/dist/fabric.min.js"></script>
     <link rel="stylesheet" href="/asset/style.css">
 </head>
 <body>
@@ -374,7 +374,6 @@
                 }
             }
             
-            // ---------- 图形题渲染（含完整撤销/重做） ----------
             function renderGraphic(container, item, index) {
                 const graphicDiv = document.createElement('div');
                 graphicDiv.className = 'graphic-container';
@@ -392,6 +391,7 @@
                 
                 const btnSelect = createToolButton('选择', '选择/移动对象 (V)');
                 const btnDraw = createToolButton('画笔', '自由绘制 (P)', true);
+                const btnErase = createToolButton('擦除', '擦除 (E)');          // 新增擦除按钮
                 const btnLine = createToolButton('直线', '绘制直线 (L)');
                 const btnRect = createToolButton('矩形', '绘制矩形 (R)');
                 const btnCircle = createToolButton('圆形', '绘制圆形 (C)');
@@ -415,7 +415,7 @@
                 
                 const group1 = document.createElement('span');
                 group1.className = 'toolbar-group';
-                group1.append(btnSelect, btnDraw, btnLine, btnRect, btnCircle, btnText);
+                group1.append(btnSelect, btnDraw, btnErase, btnLine, btnRect, btnCircle, btnText);
                 
                 const group2 = document.createElement('span');
                 group2.className = 'toolbar-group';
@@ -433,6 +433,7 @@
                 
                 const canvasEl = document.createElement('canvas');
                 canvasEl.className = 'graphic-canvas';
+                // 初始尺寸（无背景图时使用）
                 canvasEl.width = 600;
                 canvasEl.height = 400;
                 
@@ -455,7 +456,6 @@
                 
                 function saveState() {
                     if (ignoreSave) return;
-                    
                     const bg = canvas.backgroundImage;
                     canvas.backgroundImage = null;
                     const json = canvas.toJSON();
@@ -466,7 +466,6 @@
                     }
                     history.push(json);
                     historyIndex++;
-                    
                     updateUndoRedoButtons();
                 }
                 
@@ -511,6 +510,7 @@
                     saveState();
                 }
                 
+                // 初始化保存
                 saveState();
                 
                 canvas.on('object:added', saveState);
@@ -522,44 +522,65 @@
                 btnRedo.addEventListener('click', redo);
                 btnClear.addEventListener('click', clearCanvas);
                 
-                let currentMode = 'draw';
-                let isDrawing = false;
-                let startPoint = null;
-                let tempShape = null;
-                
-                const setActiveMode = (mode) => {
-                    currentMode = mode;
-                    [btnSelect, btnDraw, btnLine, btnRect, btnCircle, btnText].forEach(btn => btn.classList.remove('active'));
-                    if (mode === 'select') btnSelect.classList.add('active');
-                    else if (mode === 'draw') btnDraw.classList.add('active');
-                    else if (mode === 'line') btnLine.classList.add('active');
-                    else if (mode === 'rect') btnRect.classList.add('active');
-                    else if (mode === 'circle') btnCircle.classList.add('active');
-                    else if (mode === 'text') btnText.classList.add('active');
-                    
-                    canvas.isDrawingMode = (mode === 'draw');
-                    canvas.selection = (mode === 'select');
-                    canvas.forEachObject(obj => obj.selectable = (mode === 'select'));
-                    canvas.renderAll();
-                };
-                
-                const getCurrentStyle = () => ({
-                    stroke: colorPicker.value,
-                    strokeWidth: parseInt(strokeWidthInput.value, 10),
-                    fill: 'transparent'
-                });
-                
+                // ---------- 擦除工具初始化 ----------
+                // 创建橡皮擦画笔实例
+                const eraserBrush = new fabric.EraserBrush(canvas);
+                // 初始时画笔为普通自由绘制画笔
+                canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
                 canvas.freeDrawingBrush.color = colorPicker.value;
                 canvas.freeDrawingBrush.width = parseInt(strokeWidthInput.value, 10);
                 
+                // 颜色/线宽变化时更新普通画笔（橡皮擦不受影响）
                 colorPicker.addEventListener('change', () => {
-                    canvas.freeDrawingBrush.color = colorPicker.value;
+                    if (!(canvas.freeDrawingBrush instanceof fabric.EraserBrush)) {
+                        canvas.freeDrawingBrush.color = colorPicker.value;
+                    }
                 });
                 strokeWidthInput.addEventListener('input', () => {
-                    canvas.freeDrawingBrush.width = parseInt(strokeWidthInput.value, 10);
+                    if (!(canvas.freeDrawingBrush instanceof fabric.EraserBrush)) {
+                        canvas.freeDrawingBrush.width = parseInt(strokeWidthInput.value, 10);
+                    }
                 });
                 
-                // 背景图加载（mime_type 仅用于背景图）
+                // ---------- 画布尺寸自适应 ----------
+                function resizeCanvasToBackground(img) {
+                    const naturalWidth = img.width;
+                    const naturalHeight = img.height;
+                    canvas.setDimensions({ width: naturalWidth, height: naturalHeight });
+                    canvas.setZoom(1);
+                    // 更新包装器高度以匹配画布实际高度（保持比例）
+                    wrapper.style.height = naturalHeight + 'px';
+                    // 若宽度超出容器，滚动条由 CSS 负责
+                }
+                
+                function resizeCanvasToDefault() {
+                    const containerWidth = wrapper.clientWidth;
+                    canvas.setDimensions({ width: containerWidth, height: 400 });
+                    canvas.setZoom(1);
+                    wrapper.style.height = '400px';
+                }
+                
+                // 监听窗口大小变化，无背景图时重新调整宽度
+                let resizeObserver = null;
+                if (typeof ResizeObserver !== 'undefined') {
+                    resizeObserver = new ResizeObserver(() => {
+                        if (!backgroundImage) {
+                            resizeCanvasToDefault();
+                            canvas.renderAll();
+                        }
+                    });
+                    resizeObserver.observe(wrapper);
+                } else {
+                    // 降级方案：窗口 resize 事件
+                    window.addEventListener('resize', () => {
+                        if (!backgroundImage) {
+                            resizeCanvasToDefault();
+                            canvas.renderAll();
+                        }
+                    });
+                }
+                
+                // 背景图加载
                 if (item.prototype) {
                     fabric.Image.fromURL(item.prototype, (img) => {
                         img.set({
@@ -568,28 +589,88 @@
                             hasControls: false,
                             lockMovementX: true,
                             lockMovementY: true,
-                            hoverCursor: 'default'
+                            hoverCursor: 'default',
+                            erasable: false,
                         });
+                        // 设置画布尺寸为图片原始尺寸
+                        resizeCanvasToBackground(img);
                         canvas.setBackgroundImage(img, () => {
                             canvas.renderAll();
-                            saveState();
+                            saveState(); // 带背景图状态
                         }, {
-                            scaleX: canvas.width / img.width,
-                            scaleY: canvas.height / img.height
+                            // 由于尺寸已匹配，无需缩放
+                            scaleX: 1,
+                            scaleY: 1
                         });
                         backgroundImage = img;
                     }, undefined, { crossOrigin: 'anonymous' });
+                } else {
+                    // 无背景图，使用默认尺寸
+                    resizeCanvasToDefault();
                 }
+                
+                // ---------- 绘图模式管理 ----------
+                let currentMode = 'draw'; // draw, select, line, rect, circle, text, erase
+                let isDrawing = false;
+                let startPoint = null;
+                let tempShape = null;
+                
+                const setActiveMode = (mode) => {
+                    currentMode = mode;
+                    [btnSelect, btnDraw, btnErase, btnLine, btnRect, btnCircle, btnText].forEach(btn => btn.classList.remove('active'));
+                    if (mode === 'select') btnSelect.classList.add('active');
+                    else if (mode === 'draw') btnDraw.classList.add('active');
+                    else if (mode === 'erase') btnErase.classList.add('active');
+                    else if (mode === 'line') btnLine.classList.add('active');
+                    else if (mode === 'rect') btnRect.classList.add('active');
+                    else if (mode === 'circle') btnCircle.classList.add('active');
+                    else if (mode === 'text') btnText.classList.add('active');
+                    
+                    // 设置画布交互模式
+                    if (mode === 'draw') {
+                        canvas.isDrawingMode = true;
+                        canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
+                        canvas.freeDrawingBrush.color = colorPicker.value;
+                        canvas.freeDrawingBrush.width = parseInt(strokeWidthInput.value, 10);
+                    } else if (mode === 'erase') {
+                        canvas.isDrawingMode = true;
+                        canvas.freeDrawingBrush = eraserBrush;
+                        // 橡皮擦宽度可用滑块调整
+                        eraserBrush.width = parseInt(strokeWidthInput.value, 10);
+                    } else {
+                        canvas.isDrawingMode = false;
+                    }
+                    
+                    canvas.selection = (mode === 'select');
+                    canvas.forEachObject(obj => obj.selectable = (mode === 'select'));
+                    canvas.renderAll();
+                };
+                
+                // 滑块变化时同步更新橡皮擦宽度
+                strokeWidthInput.addEventListener('input', () => {
+                    const w = parseInt(strokeWidthInput.value, 10);
+                    if (canvas.freeDrawingBrush instanceof fabric.EraserBrush) {
+                        eraserBrush.width = w;
+                    }
+                });
                 
                 btnSelect.addEventListener('click', () => setActiveMode('select'));
                 btnDraw.addEventListener('click', () => setActiveMode('draw'));
+                btnErase.addEventListener('click', () => setActiveMode('erase'));
                 btnLine.addEventListener('click', () => setActiveMode('line'));
                 btnRect.addEventListener('click', () => setActiveMode('rect'));
                 btnCircle.addEventListener('click', () => setActiveMode('circle'));
                 btnText.addEventListener('click', () => setActiveMode('text'));
                 
+                // 绘图事件（直线、矩形、圆形）
+                const getCurrentStyle = () => ({
+                    stroke: colorPicker.value,
+                    strokeWidth: parseInt(strokeWidthInput.value, 10),
+                    fill: 'transparent'
+                });
+                
                 canvas.on('mouse:down', (opt) => {
-                    if (currentMode === 'select' || currentMode === 'draw') return;
+                    if (currentMode === 'select' || currentMode === 'draw' || currentMode === 'erase') return;
                     const pointer = canvas.getPointer(opt.e);
                     startPoint = { x: pointer.x, y: pointer.y };
                     isDrawing = true;
@@ -660,6 +741,7 @@
                     startPoint = null;
                 });
                 
+                // 文本工具：双击添加文本
                 canvas.on('mouse:dblclick', (opt) => {
                     if (currentMode !== 'text') return;
                     const pointer = canvas.getPointer(opt.e);
@@ -675,6 +757,7 @@
                     setActiveMode('select');
                 });
                 
+                // 默认激活画笔模式
                 setActiveMode('draw');
                 updateUndoRedoButtons();
             }
@@ -912,14 +995,16 @@
                 submitBtn.disabled = true;
                 submitBtn.textContent = '正在提交';
                 
-                // 构建提交答案，graphic 题提交 Fabric JSON 对象（非 Base64 图片）
+                // 构建提交答案，graphic 题提交 PNG Base64 字符串
                 const submitAnswers = [];
                 for (let i = 0; i < userAnswers.length; i++) {
                     const item = answerSheet[i];
                     if (item && item.type === 'graphic') {
                         const canvas = graphicInstances.get(i);
                         if (canvas) {
-                            submitAnswers.push(canvas.toJSON());
+                            // 导出为 PNG 格式的 Base64 字符串（包含背景图）
+                            const dataURL = canvas.toDataURL('image/png');
+                            submitAnswers.push(dataURL);
                         } else {
                             submitAnswers.push(null);
                         }
