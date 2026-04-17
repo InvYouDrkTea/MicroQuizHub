@@ -100,6 +100,14 @@
                 setTimeout(() => notification.remove(), 3000);
             }
             
+            function updatePanelTitle(token) {
+                const panelTitle = document.querySelector('.panel-title');
+                if (panelTitle) {
+                    const displayToken = token && token.trim() !== '' ? token : '访客';
+                    panelTitle.textContent = `${displayToken}，请在此区域作答`;
+                }
+            }
+            
             function updateAutoSaveStatus(success) {
                 if (!autoSaveStatusDiv) return;
                 if (success) {
@@ -259,7 +267,7 @@
                         return { success: false, code: 1 };
                     } else if (code === 2) {
                         if (operationName === '验证') {
-                            showNotification('你已提交', 'error');
+                            showNotification('不允许重复作答', 'error');
                         } else {
                             showNotification(`${operationName}失败：不允许重复提交`, 'error');
                         }
@@ -381,21 +389,77 @@
                 const toolbar = document.createElement('div');
                 toolbar.className = 'graphic-toolbar';
                 
-                const createToolButton = (text, title, active = false) => {
-                    const btn = document.createElement('button');
-                    btn.textContent = text;
-                    btn.title = title;
-                    if (active) btn.classList.add('active');
-                    return btn;
-                };
+                // ----- 第一行：选择、画笔、文字、擦除 -----
+                const row1 = document.createElement('div');
+                row1.className = 'toolbar-row';
                 
-                const btnSelect = createToolButton('选择', '选择/移动对象 (V)');
-                const btnDraw = createToolButton('画笔', '自由绘制 (P)', true);
-                const btnErase = createToolButton('擦除', '擦除 (E)');          // 新增擦除按钮
-                const btnLine = createToolButton('直线', '绘制直线 (L)');
-                const btnRect = createToolButton('矩形', '绘制矩形 (R)');
-                const btnCircle = createToolButton('圆形', '绘制圆形 (C)');
-                const btnText = createToolButton('文本', '添加文本 (T)');
+                // 选择工具
+                const btnSelect = document.createElement('button');
+                btnSelect.textContent = '选择';
+                btnSelect.title = '选择/移动对象 (V)';
+                
+                // 画笔下拉菜单
+                const brushDropdownContainer = document.createElement('span');
+                brushDropdownContainer.className = 'brush-dropdown-container';
+                const brushBtn = document.createElement('button');
+                brushBtn.className = 'brush-dropdown-btn';
+                brushBtn.innerHTML = '画笔 <span class="dropdown-arrow">▼</span>';
+                brushBtn.title = '选择绘图工具';
+                const brushMenu = document.createElement('div');
+                brushMenu.className = 'brush-dropdown-menu';
+                
+                const brushTools = [
+                    { name: '自由绘制', mode: 'draw' },
+                    { name: '直线', mode: 'line' },
+                    { name: '矩形', mode: 'rect' },
+                    { name: '圆形', mode: 'circle' },
+                    { name: '三角形', mode: 'triangle' },
+                    { name: '椭圆', mode: 'ellipse' },
+                    { name: '多边形', mode: 'polygon' },
+                    { name: '折线', mode: 'polyline' }
+                ];
+                
+                brushTools.forEach(tool => {
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = 'brush-dropdown-item';
+                    itemDiv.textContent = tool.name;
+                    itemDiv.dataset.mode = tool.mode;
+                    itemDiv.addEventListener('click', () => {
+                        setActiveMode(tool.mode);
+                        brushMenu.classList.remove('show');
+                        brushBtn.innerHTML = `${tool.name} <span class="dropdown-arrow">▼</span>`;
+                    });
+                    brushMenu.appendChild(itemDiv);
+                });
+                
+                brushBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    brushMenu.classList.toggle('show');
+                });
+                document.addEventListener('click', () => {
+                    brushMenu.classList.remove('show');
+                });
+                brushDropdownContainer.appendChild(brushBtn);
+                brushDropdownContainer.appendChild(brushMenu);
+                
+                // 文字工具
+                const btnText = document.createElement('button');
+                btnText.textContent = '文字';
+                btnText.title = '添加文本 (T)';
+                
+                // 擦除工具
+                const btnErase = document.createElement('button');
+                btnErase.textContent = '擦除';
+                btnErase.title = '擦除 (E)';
+                
+                row1.appendChild(btnSelect);
+                row1.appendChild(brushDropdownContainer);
+                row1.appendChild(btnText);
+                row1.appendChild(btnErase);
+                
+                // ----- 第二行：颜色 + 线宽 -----
+                const row2 = document.createElement('div');
+                row2.className = 'toolbar-row';
                 
                 const colorPicker = document.createElement('input');
                 colorPicker.type = 'color';
@@ -409,23 +473,31 @@
                 strokeWidthInput.value = '3';
                 strokeWidthInput.title = '线宽';
                 
-                const btnUndo = createToolButton('↩', '撤销 (Ctrl+Z)');
-                const btnRedo = createToolButton('↪', '重做 (Ctrl+Y)');
-                const btnClear = createToolButton('清空', '清空画布');
+                row2.appendChild(colorPicker);
+                row2.appendChild(strokeWidthInput);
                 
-                const group1 = document.createElement('span');
-                group1.className = 'toolbar-group';
-                group1.append(btnSelect, btnDraw, btnErase, btnLine, btnRect, btnCircle, btnText);
+                // ----- 第三行：撤销、重做、清空 -----
+                const row3 = document.createElement('div');
+                row3.className = 'toolbar-row';
                 
-                const group2 = document.createElement('span');
-                group2.className = 'toolbar-group';
-                group2.append(colorPicker, strokeWidthInput);
+                const btnUndo = document.createElement('button');
+                btnUndo.textContent = '↩';
+                btnUndo.title = '撤销 (Ctrl+Z)';
+                const btnRedo = document.createElement('button');
+                btnRedo.textContent = '↪';
+                btnRedo.title = '重做 (Ctrl+Y)';
+                const btnClear = document.createElement('button');
+                btnClear.textContent = '清空';
+                btnClear.title = '清空画布';
                 
-                const group3 = document.createElement('span');
-                group3.className = 'toolbar-group';
-                group3.append(btnUndo, btnRedo, btnClear);
+                row3.appendChild(btnUndo);
+                row3.appendChild(btnRedo);
+                row3.appendChild(btnClear);
                 
-                toolbar.append(group1, group2, group3);
+                toolbar.appendChild(row1);
+                toolbar.appendChild(row2);
+                toolbar.appendChild(row3);
+                
                 graphicDiv.appendChild(toolbar);
                 
                 const wrapper = document.createElement('div');
@@ -433,7 +505,6 @@
                 
                 const canvasEl = document.createElement('canvas');
                 canvasEl.className = 'graphic-canvas';
-                // 初始尺寸（无背景图时使用）
                 canvasEl.width = 600;
                 canvasEl.height = 400;
                 
@@ -510,7 +581,6 @@
                     saveState();
                 }
                 
-                // 初始化保存
                 saveState();
                 
                 canvas.on('object:added', saveState);
@@ -523,22 +593,22 @@
                 btnClear.addEventListener('click', clearCanvas);
                 
                 // ---------- 擦除工具初始化 ----------
-                // 创建橡皮擦画笔实例
                 const eraserBrush = new fabric.EraserBrush(canvas);
-                // 初始时画笔为普通自由绘制画笔
                 canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
                 canvas.freeDrawingBrush.color = colorPicker.value;
                 canvas.freeDrawingBrush.width = parseInt(strokeWidthInput.value, 10);
                 
-                // 颜色/线宽变化时更新普通画笔（橡皮擦不受影响）
                 colorPicker.addEventListener('change', () => {
                     if (!(canvas.freeDrawingBrush instanceof fabric.EraserBrush)) {
                         canvas.freeDrawingBrush.color = colorPicker.value;
                     }
                 });
                 strokeWidthInput.addEventListener('input', () => {
+                    const w = parseInt(strokeWidthInput.value, 10);
                     if (!(canvas.freeDrawingBrush instanceof fabric.EraserBrush)) {
-                        canvas.freeDrawingBrush.width = parseInt(strokeWidthInput.value, 10);
+                        canvas.freeDrawingBrush.width = w;
+                    } else {
+                        eraserBrush.width = w;
                     }
                 });
                 
@@ -548,9 +618,7 @@
                     const naturalHeight = img.height;
                     canvas.setDimensions({ width: naturalWidth, height: naturalHeight });
                     canvas.setZoom(1);
-                    // 更新包装器高度以匹配画布实际高度（保持比例）
                     wrapper.style.height = naturalHeight + 'px';
-                    // 若宽度超出容器，滚动条由 CSS 负责
                 }
                 
                 function resizeCanvasToDefault() {
@@ -560,7 +628,6 @@
                     wrapper.style.height = '400px';
                 }
                 
-                // 监听窗口大小变化，无背景图时重新调整宽度
                 let resizeObserver = null;
                 if (typeof ResizeObserver !== 'undefined') {
                     resizeObserver = new ResizeObserver(() => {
@@ -571,7 +638,6 @@
                     });
                     resizeObserver.observe(wrapper);
                 } else {
-                    // 降级方案：窗口 resize 事件
                     window.addEventListener('resize', () => {
                         if (!backgroundImage) {
                             resizeCanvasToDefault();
@@ -580,7 +646,6 @@
                     });
                 }
                 
-                // 背景图加载
                 if (item.prototype) {
                     fabric.Image.fromURL(item.prototype, (img) => {
                         img.set({
@@ -592,77 +657,80 @@
                             hoverCursor: 'default',
                             erasable: false,
                         });
-                        // 设置画布尺寸为图片原始尺寸
                         resizeCanvasToBackground(img);
                         canvas.setBackgroundImage(img, () => {
                             canvas.renderAll();
-                            saveState(); // 带背景图状态
+                            saveState();
                         }, {
-                            // 由于尺寸已匹配，无需缩放
                             scaleX: 1,
                             scaleY: 1
                         });
                         backgroundImage = img;
                     }, undefined, { crossOrigin: 'anonymous' });
                 } else {
-                    // 无背景图，使用默认尺寸
                     resizeCanvasToDefault();
                 }
                 
                 // ---------- 绘图模式管理 ----------
-                let currentMode = 'draw'; // draw, select, line, rect, circle, text, erase
+                let currentMode = 'draw';
                 let isDrawing = false;
                 let startPoint = null;
                 let tempShape = null;
+                let polyPoints = [];
                 
                 const setActiveMode = (mode) => {
                     currentMode = mode;
-                    [btnSelect, btnDraw, btnErase, btnLine, btnRect, btnCircle, btnText].forEach(btn => btn.classList.remove('active'));
-                    if (mode === 'select') btnSelect.classList.add('active');
-                    else if (mode === 'draw') btnDraw.classList.add('active');
-                    else if (mode === 'erase') btnErase.classList.add('active');
-                    else if (mode === 'line') btnLine.classList.add('active');
-                    else if (mode === 'rect') btnRect.classList.add('active');
-                    else if (mode === 'circle') btnCircle.classList.add('active');
-                    else if (mode === 'text') btnText.classList.add('active');
                     
-                    // 设置画布交互模式
-                    if (mode === 'draw') {
+                    // 更新下拉菜单激活项
+                    document.querySelectorAll('.brush-dropdown-item').forEach(el => {
+                        el.classList.remove('active');
+                        if (el.dataset.mode === mode) el.classList.add('active');
+                    });
+                    
+                    // 按钮激活样式
+                    [btnSelect, btnText, btnErase].forEach(btn => btn.classList.remove('active'));
+                    if (mode === 'select') btnSelect.classList.add('active');
+                    else if (mode === 'text') btnText.classList.add('active');
+                    else if (mode === 'erase') btnErase.classList.add('active');
+                    
+                    if (mode === 'text') {
+                        canvas.isDrawingMode = false;
+                        canvas.selection = false;
+                    } else if (mode === 'erase') {
+                        canvas.isDrawingMode = true;
+                        canvas.freeDrawingBrush = eraserBrush;
+                        eraserBrush.width = parseInt(strokeWidthInput.value, 10);
+                        canvas.selection = false;
+                    } else if (mode === 'draw') {
                         canvas.isDrawingMode = true;
                         canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
                         canvas.freeDrawingBrush.color = colorPicker.value;
                         canvas.freeDrawingBrush.width = parseInt(strokeWidthInput.value, 10);
-                    } else if (mode === 'erase') {
-                        canvas.isDrawingMode = true;
-                        canvas.freeDrawingBrush = eraserBrush;
-                        // 橡皮擦宽度可用滑块调整
-                        eraserBrush.width = parseInt(strokeWidthInput.value, 10);
+                        canvas.selection = false;
+                    } else if (mode === 'select') {
+                        canvas.isDrawingMode = false;
+                        canvas.selection = true;
+                        canvas.forEachObject(obj => obj.selectable = true);
                     } else {
                         canvas.isDrawingMode = false;
+                        canvas.selection = false;
                     }
                     
-                    canvas.selection = (mode === 'select');
-                    canvas.forEachObject(obj => obj.selectable = (mode === 'select'));
+                    if (mode !== 'select') {
+                        canvas.forEachObject(obj => obj.selectable = false);
+                    }
                     canvas.renderAll();
+                    
+                    isDrawing = false;
+                    startPoint = null;
+                    tempShape = null;
+                    polyPoints = [];
                 };
                 
-                // 滑块变化时同步更新橡皮擦宽度
-                strokeWidthInput.addEventListener('input', () => {
-                    const w = parseInt(strokeWidthInput.value, 10);
-                    if (canvas.freeDrawingBrush instanceof fabric.EraserBrush) {
-                        eraserBrush.width = w;
-                    }
-                });
-                
                 btnSelect.addEventListener('click', () => setActiveMode('select'));
-                btnDraw.addEventListener('click', () => setActiveMode('draw'));
-                btnErase.addEventListener('click', () => setActiveMode('erase'));
-                btnLine.addEventListener('click', () => setActiveMode('line'));
-                btnRect.addEventListener('click', () => setActiveMode('rect'));
-                btnCircle.addEventListener('click', () => setActiveMode('circle'));
                 btnText.addEventListener('click', () => setActiveMode('text'));
+                btnErase.addEventListener('click', () => setActiveMode('erase'));
                 
-                // 绘图事件（直线、矩形、圆形）
                 const getCurrentStyle = () => ({
                     stroke: colorPicker.value,
                     strokeWidth: parseInt(strokeWidthInput.value, 10),
@@ -670,51 +738,57 @@
                 });
                 
                 canvas.on('mouse:down', (opt) => {
-                    if (currentMode === 'select' || currentMode === 'draw' || currentMode === 'erase') return;
+                    if (['draw', 'erase', 'text', 'select'].includes(currentMode)) return;
                     const pointer = canvas.getPointer(opt.e);
                     startPoint = { x: pointer.x, y: pointer.y };
-                    isDrawing = true;
                     
+                    if (currentMode === 'polygon' || currentMode === 'polyline') {
+                        if (!polyPoints.length) {
+                            polyPoints.push(startPoint);
+                        }
+                        return;
+                    }
+                    
+                    isDrawing = true;
                     const style = getCurrentStyle();
+                    
                     if (currentMode === 'line') {
                         tempShape = new fabric.Line([pointer.x, pointer.y, pointer.x, pointer.y], {
-                            stroke: style.stroke,
-                            strokeWidth: style.strokeWidth,
-                            selectable: false,
-                            evented: false
+                            stroke: style.stroke, strokeWidth: style.strokeWidth,
+                            selectable: false, evented: false
                         });
                     } else if (currentMode === 'rect') {
                         tempShape = new fabric.Rect({
-                            left: pointer.x,
-                            top: pointer.y,
-                            width: 0,
-                            height: 0,
-                            stroke: style.stroke,
-                            strokeWidth: style.strokeWidth,
-                            fill: 'transparent',
-                            selectable: false,
-                            evented: false
+                            left: pointer.x, top: pointer.y, width: 0, height: 0,
+                            stroke: style.stroke, strokeWidth: style.strokeWidth, fill: 'transparent',
+                            selectable: false, evented: false
                         });
                     } else if (currentMode === 'circle') {
                         tempShape = new fabric.Circle({
-                            left: pointer.x,
-                            top: pointer.y,
-                            radius: 0,
-                            stroke: style.stroke,
-                            strokeWidth: style.strokeWidth,
-                            fill: 'transparent',
-                            selectable: false,
-                            evented: false
+                            left: pointer.x, top: pointer.y, radius: 0,
+                            stroke: style.stroke, strokeWidth: style.strokeWidth, fill: 'transparent',
+                            selectable: false, evented: false
+                        });
+                    } else if (currentMode === 'triangle') {
+                        tempShape = new fabric.Triangle({
+                            left: pointer.x, top: pointer.y, width: 0, height: 0,
+                            stroke: style.stroke, strokeWidth: style.strokeWidth, fill: 'transparent',
+                            selectable: false, evented: false
+                        });
+                    } else if (currentMode === 'ellipse') {
+                        tempShape = new fabric.Ellipse({
+                            left: pointer.x, top: pointer.y, rx: 0, ry: 0,
+                            stroke: style.stroke, strokeWidth: style.strokeWidth, fill: 'transparent',
+                            selectable: false, evented: false
                         });
                     }
-                    if (tempShape) {
-                        canvas.add(tempShape);
-                    }
+                    if (tempShape) canvas.add(tempShape);
                 });
                 
                 canvas.on('mouse:move', (opt) => {
                     if (!isDrawing || !tempShape) return;
                     const pointer = canvas.getPointer(opt.e);
+                    
                     if (currentMode === 'line') {
                         tempShape.set({ x2: pointer.x, y2: pointer.y });
                     } else if (currentMode === 'rect') {
@@ -727,6 +801,19 @@
                     } else if (currentMode === 'circle') {
                         const radius = Math.sqrt(Math.pow(pointer.x - startPoint.x, 2) + Math.pow(pointer.y - startPoint.y, 2));
                         tempShape.set({ radius: radius });
+                    } else if (currentMode === 'triangle') {
+                        tempShape.set({
+                            width: Math.abs(pointer.x - startPoint.x),
+                            height: Math.abs(pointer.y - startPoint.y)
+                        });
+                        if (pointer.x < startPoint.x) tempShape.set({ left: pointer.x });
+                        if (pointer.y < startPoint.y) tempShape.set({ top: pointer.y });
+                    } else if (currentMode === 'ellipse') {
+                        tempShape.set({
+                            rx: Math.abs(pointer.x - startPoint.x) / 2,
+                            ry: Math.abs(pointer.y - startPoint.y) / 2
+                        });
+                        tempShape.set({ left: Math.min(pointer.x, startPoint.x), top: Math.min(pointer.y, startPoint.y) });
                     }
                     canvas.renderAll();
                 });
@@ -736,28 +823,59 @@
                         tempShape.set({ selectable: true, evented: true });
                         canvas.setActiveObject(tempShape);
                         tempShape = null;
+                        saveState();
                     }
                     isDrawing = false;
-                    startPoint = null;
                 });
                 
-                // 文本工具：双击添加文本
+                // 双击事件：添加文本 或 完成多边形/折线
                 canvas.on('mouse:dblclick', (opt) => {
-                    if (currentMode !== 'text') return;
-                    const pointer = canvas.getPointer(opt.e);
-                    const text = new fabric.IText('文本', {
-                        left: pointer.x,
-                        top: pointer.y,
-                        fill: colorPicker.value,
-                        fontSize: 20,
-                        fontFamily: 'Microsoft YaHei'
-                    });
-                    canvas.add(text);
-                    canvas.setActiveObject(text);
-                    setActiveMode('select');
+                    if (currentMode === 'text') {
+                        const pointer = canvas.getPointer(opt.e);
+                        const text = new fabric.IText('文本', {
+                            left: pointer.x, top: pointer.y,
+                            fill: colorPicker.value, fontSize: 20, fontFamily: 'Microsoft YaHei'
+                        });
+                        canvas.add(text);
+                        canvas.setActiveObject(text);
+                        saveState();
+                    } else if (currentMode === 'polygon' || currentMode === 'polyline') {
+                        if (polyPoints.length > 1) {
+                            const points = polyPoints.map(p => ({ x: p.x, y: p.y }));
+                            let shape;
+                            if (currentMode === 'polygon') {
+                                shape = new fabric.Polygon(points, {
+                                    stroke: colorPicker.value,
+                                    strokeWidth: parseInt(strokeWidthInput.value, 10),
+                                    fill: 'transparent',
+                                    selectable: true, evented: true
+                                });
+                            } else {
+                                shape = new fabric.Polyline(points, {
+                                    stroke: colorPicker.value,
+                                    strokeWidth: parseInt(strokeWidthInput.value, 10),
+                                    fill: 'transparent',
+                                    selectable: true, evented: true
+                                });
+                            }
+                            canvas.add(shape);
+                            canvas.setActiveObject(shape);
+                            saveState();
+                        }
+                        polyPoints = [];
+                    }
                 });
                 
-                // 默认激活画笔模式
+                // 多边形/折线单击添加点（简化版，不绘制预览线）
+                canvas.on('mouse:down', (opt) => {
+                    if (currentMode !== 'polygon' && currentMode !== 'polyline') return;
+                    const pointer = canvas.getPointer(opt.e);
+                    if (polyPoints.length > 0) {
+                        polyPoints.push({ x: pointer.x, y: pointer.y });
+                    }
+                });
+                
+                // 默认激活自由绘制
                 setActiveMode('draw');
                 updateUndoRedoButtons();
             }
@@ -1084,6 +1202,10 @@
                     tokenInputArea.style.display = 'none';
                     tokenBtn.disabled = true;
                 }
+                loadingContainer.style.display = 'none';
+                mainContainer.style.display = 'flex';
+                // 新增：更新标题
+                updatePanelTitle(tokenValue);
             }
             
             async function submitToken() {

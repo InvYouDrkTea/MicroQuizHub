@@ -638,13 +638,19 @@ body {
 
 .graphic-toolbar {
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
+    flex-direction: column;
     gap: 8px;
     padding: 8px;
     background-color: #f8f9fa;
     border-radius: 6px;
     border: 1px solid #e9ecef;
+}
+
+.graphic-toolbar .toolbar-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
 }
 
 .graphic-toolbar button {
@@ -690,16 +696,62 @@ body {
     cursor: pointer;
 }
 
-.graphic-toolbar .toolbar-group {
+/* 画笔下拉菜单 */
+.brush-dropdown-container {
+    position: relative;
+    display: inline-block;
+}
+.brush-dropdown-btn {
+    padding: 6px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: white;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+    min-width: 60px;
     display: flex;
     align-items: center;
     gap: 4px;
-    padding: 0 4px;
-    border-right: 1px solid #dee2e6;
 }
-
-.graphic-toolbar .toolbar-group:last-child {
-    border-right: none;
+.brush-dropdown-btn .dropdown-arrow {
+    font-size: 10px;
+    margin-left: 4px;
+}
+.brush-dropdown-btn:hover {
+    background-color: #e9ecef;
+    border-color: #adb5bd;
+}
+.brush-dropdown-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    z-index: 1000;
+    min-width: 100px;
+    display: none;
+    margin-top: 4px;
+    padding: 4px 0;
+}
+.brush-dropdown-menu.show {
+    display: block;
+}
+.brush-dropdown-item {
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.2s;
+    white-space: nowrap;
+}
+.brush-dropdown-item:hover {
+    background-color: #f0f0f0;
+}
+.brush-dropdown-item.active {
+    background-color: #4CAF50;
+    color: white;
 }
 
 .graphic-canvas-wrapper {
@@ -728,9 +780,6 @@ body {
     }
     .graphic-toolbar input[type="range"] {
         width: 80px;
-    }
-    .graphic-toolbar .toolbar-group {
-        flex-wrap: wrap;
     }
     .graphic-canvas-wrapper {
         -webkit-overflow-scrolling: touch;
@@ -767,3 +816,4 @@ body {
     background-color: #f9f9f9;
     border-radius: 4px;
     border: 1px dashed #ccc;
+}
