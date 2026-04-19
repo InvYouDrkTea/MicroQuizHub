@@ -393,12 +393,10 @@
                 const row1 = document.createElement('div');
                 row1.className = 'toolbar-row';
                 
-                // 选择工具
                 const btnSelect = document.createElement('button');
                 btnSelect.textContent = '选择';
                 btnSelect.title = '选择/移动对象 (V)';
                 
-                // 画笔下拉菜单
                 const brushDropdownContainer = document.createElement('span');
                 brushDropdownContainer.className = 'brush-dropdown-container';
                 const brushBtn = document.createElement('button');
@@ -442,12 +440,10 @@
                 brushDropdownContainer.appendChild(brushBtn);
                 brushDropdownContainer.appendChild(brushMenu);
                 
-                // 文字工具
                 const btnText = document.createElement('button');
                 btnText.textContent = '文字';
                 btnText.title = '添加文本 (T)';
                 
-                // 擦除工具
                 const btnErase = document.createElement('button');
                 btnErase.textContent = '擦除';
                 btnErase.title = '擦除 (E)';
@@ -614,11 +610,26 @@
                 
                 // ---------- 画布尺寸自适应 ----------
                 function resizeCanvasToBackground(img) {
+                    const containerWidth = wrapper.clientWidth;
                     const naturalWidth = img.width;
                     const naturalHeight = img.height;
-                    canvas.setDimensions({ width: naturalWidth, height: naturalHeight });
+                    
+                    let targetWidth = naturalWidth;
+                    let targetHeight = naturalHeight;
+                    
+                    // 如果图片宽度小于容器宽度，等比放大至容器宽度
+                    if (naturalWidth < containerWidth) {
+                        const scale = containerWidth / naturalWidth;
+                        targetWidth = containerWidth;
+                        targetHeight = naturalHeight * scale;
+                    }
+                    
+                    canvas.setDimensions({ width: targetWidth, height: targetHeight });
                     canvas.setZoom(1);
-                    wrapper.style.height = naturalHeight + 'px';
+                    wrapper.style.height = targetHeight + 'px';
+                    
+                    // 返回缩放比例供背景图片使用
+                    return { scaleX: targetWidth / naturalWidth, scaleY: targetHeight / naturalHeight };
                 }
                 
                 function resizeCanvasToDefault() {
@@ -657,13 +668,13 @@
                             hoverCursor: 'default',
                             erasable: false,
                         });
-                        resizeCanvasToBackground(img);
+                        const scale = resizeCanvasToBackground(img);
                         canvas.setBackgroundImage(img, () => {
                             canvas.renderAll();
                             saveState();
                         }, {
-                            scaleX: 1,
-                            scaleY: 1
+                            scaleX: scale.scaleX,
+                            scaleY: scale.scaleY
                         });
                         backgroundImage = img;
                     }, undefined, { crossOrigin: 'anonymous' });
@@ -677,17 +688,49 @@
                 let startPoint = null;
                 let tempShape = null;
                 let polyPoints = [];
+                let previewLine = null;        // 已有点之间的连线（绿色虚线）
+                let tempGuideLine = null;      // 最后一点到鼠标的指引线（橙色虚线）
+                
+                // 更新多边形/折线预览线
+                function updatePolyPreview() {
+                    if (previewLine) canvas.remove(previewLine);
+                    if (polyPoints.length < 2) {
+                        previewLine = null;
+                        return;
+                    }
+                    const points = polyPoints.map(p => ({ x: p.x, y: p.y }));
+                    previewLine = new fabric.Polyline(points, {
+                        stroke: '#4CAF50',
+                        strokeWidth: 2,
+                        fill: 'transparent',
+                        selectable: false,
+                        evented: false,
+                        strokeDashArray: [5, 5]
+                    });
+                    canvas.add(previewLine);
+                    previewLine.sendToBack();
+                }
+                
+                // 清理预览线和指引线
+                function clearPolyPreview() {
+                    if (previewLine) {
+                        canvas.remove(previewLine);
+                        previewLine = null;
+                    }
+                    if (tempGuideLine) {
+                        canvas.remove(tempGuideLine);
+                        tempGuideLine = null;
+                    }
+                }
                 
                 const setActiveMode = (mode) => {
                     currentMode = mode;
                     
-                    // 更新下拉菜单激活项
                     document.querySelectorAll('.brush-dropdown-item').forEach(el => {
                         el.classList.remove('active');
                         if (el.dataset.mode === mode) el.classList.add('active');
                     });
                     
-                    // 按钮激活样式
                     [btnSelect, btnText, btnErase].forEach(btn => btn.classList.remove('active'));
                     if (mode === 'select') btnSelect.classList.add('active');
                     else if (mode === 'text') btnText.classList.add('active');
@@ -719,12 +762,15 @@
                     if (mode !== 'select') {
                         canvas.forEachObject(obj => obj.selectable = false);
                     }
-                    canvas.renderAll();
                     
+                    // 清理多边形预览状态
+                    clearPolyPreview();
+                    polyPoints = [];
                     isDrawing = false;
                     startPoint = null;
                     tempShape = null;
-                    polyPoints = [];
+                    
+                    canvas.renderAll();
                 };
                 
                 btnSelect.addEventListener('click', () => setActiveMode('select'));
@@ -737,15 +783,22 @@
                     fill: 'transparent'
                 });
                 
+                // 绘图事件：鼠标按下
                 canvas.on('mouse:down', (opt) => {
                     if (['draw', 'erase', 'text', 'select'].includes(currentMode)) return;
                     const pointer = canvas.getPointer(opt.e);
                     startPoint = { x: pointer.x, y: pointer.y };
                     
                     if (currentMode === 'polygon' || currentMode === 'polyline') {
-                        if (!polyPoints.length) {
-                            polyPoints.push(startPoint);
+                        // 第一次点击：添加第一个点
+                        if (polyPoints.length === 0) {
+                            polyPoints.push({ x: pointer.x, y: pointer.y });
+                            return;
                         }
+                        // 后续点击：添加新点并更新预览线
+                        polyPoints.push({ x: pointer.x, y: pointer.y });
+                        updatePolyPreview();
+                        canvas.renderAll();
                         return;
                     }
                     
@@ -785,9 +838,30 @@
                     if (tempShape) canvas.add(tempShape);
                 });
                 
+                // 绘图事件：鼠标移动
                 canvas.on('mouse:move', (opt) => {
-                    if (!isDrawing || !tempShape) return;
                     const pointer = canvas.getPointer(opt.e);
+                    
+                    // 多边形/折线模式下的指引线
+                    if (currentMode === 'polygon' || currentMode === 'polyline') {
+                        if (polyPoints.length === 0) return;
+                        
+                        if (tempGuideLine) canvas.remove(tempGuideLine);
+                        const lastPoint = polyPoints[polyPoints.length - 1];
+                        tempGuideLine = new fabric.Line([lastPoint.x, lastPoint.y, pointer.x, pointer.y], {
+                            stroke: '#FF5722',
+                            strokeWidth: 2,
+                            selectable: false,
+                            evented: false,
+                            strokeDashArray: [5, 5]
+                        });
+                        canvas.add(tempGuideLine);
+                        tempGuideLine.sendToBack();
+                        canvas.renderAll();
+                        return;
+                    }
+                    
+                    if (!isDrawing || !tempShape) return;
                     
                     if (currentMode === 'line') {
                         tempShape.set({ x2: pointer.x, y2: pointer.y });
@@ -818,6 +892,7 @@
                     canvas.renderAll();
                 });
                 
+                // 绘图事件：鼠标松开
                 canvas.on('mouse:up', () => {
                     if (isDrawing && tempShape) {
                         tempShape.set({ selectable: true, evented: true });
@@ -828,8 +903,8 @@
                     isDrawing = false;
                 });
                 
-                // 双击事件：添加文本 或 完成多边形/折线
-                canvas.on('mouse:dblclick', (opt) => {
+                // 双击处理函数（文字添加 / 多边形完成）
+                function handleDoubleClick(opt) {
                     if (currentMode === 'text') {
                         const pointer = canvas.getPointer(opt.e);
                         const text = new fabric.IText('文本', {
@@ -862,18 +937,16 @@
                             canvas.setActiveObject(shape);
                             saveState();
                         }
+                        // 清理预览线和点数组
+                        clearPolyPreview();
                         polyPoints = [];
+                        canvas.renderAll();
                     }
-                });
+                }
                 
-                // 多边形/折线单击添加点（简化版，不绘制预览线）
-                canvas.on('mouse:down', (opt) => {
-                    if (currentMode !== 'polygon' && currentMode !== 'polyline') return;
-                    const pointer = canvas.getPointer(opt.e);
-                    if (polyPoints.length > 0) {
-                        polyPoints.push({ x: pointer.x, y: pointer.y });
-                    }
-                });
+                // 监听 PC 双击和移动端双击
+                canvas.on('mouse:dblclick', handleDoubleClick);
+                canvas.on('touch:dbltap', handleDoubleClick);
                 
                 // 默认激活自由绘制
                 setActiveMode('draw');
