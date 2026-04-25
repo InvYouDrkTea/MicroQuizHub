@@ -40,7 +40,6 @@
             </div>
         </div>
     </div>
-
     <script>
         (function(){
             let quizId = '';
@@ -60,6 +59,23 @@
             const resultTitle = document.getElementById('resultTitle');
             const quizStatusMessageDiv = document.getElementById('quizStatusMessage');
             const tokenInputArea = document.getElementById('tokenInputArea');
+            
+            // 英文 message -> 中文提示映射
+            const messageZhMap = {
+                "Token invalid": "访问令牌无效",
+                "Missing token parameter": "缺少访问令牌参数",
+                "Result not available for this quiz": "当前测验不允许查询结果",
+                "Quiz not found": "测验不存在",
+                "Result not found": "未找到结果",
+                "Token not found in result": "暂无测验结果",
+                "Missing required keys: quiz and token or values are invalid": "请求异常",
+                "Submitted, resubmission not allowed": "不允许重复提交",
+                "Quiz closed": "测验已截止",
+            };
+            
+            function getZhMessage(engMessage) {
+                return messageZhMap[engMessage] || engMessage || "请求异常";
+            }
             
             function showNotification(message, type) {
                 const existing = document.querySelector('.notification');
@@ -142,7 +158,6 @@
                     
                     quizStatusMessageDiv.style.display = 'none';
                     
-                    // group 为 null 时不允许查询结果
                     if (quizConfig.group === null) {
                         quizStatusMessageDiv.style.display = 'block';
                         quizStatusMessageDiv.className = 'quiz-status-message';
@@ -170,58 +185,56 @@
                     const url = `/result/${quizId}?token=${encodeURIComponent(token)}`;
                     const response = await fetch(url);
                     
+                    let data = null;
+                    try {
+                        data = await response.json();
+                    } catch (e) {}
+                    
                     if (response.status === 400) {
-                        let errorMsg = '请求异常';
-                        try {
-                            const data = await response.json();
-                            errorMsg = data.message || '请求异常';
-                        } catch(e) { }
+                        let engMsg = (data && data.message) ? data.message : 'Bad Request';
+                        let zhMsg = getZhMessage(engMsg);
                         if (!silent) {
                             quizStatusMessageDiv.style.display = 'block';
                             quizStatusMessageDiv.className = 'quiz-status-message';
-                            quizStatusMessageDiv.textContent = errorMsg;
+                            quizStatusMessageDiv.textContent = zhMsg;
                         }
-                        return { success: false, code: 1, message: errorMsg };
+                        return { success: false, code: 1, message: zhMsg };
                     }
                     if (response.status === 404) {
-                        let errorMsg = '暂无测验结果';
-                        try {
-                            const data = await response.json();
-                            errorMsg = data.message || '暂无测验结果';
-                        } catch(e) { }
+                        let engMsg = (data && data.message) ? data.message : 'Not Found';
+                        let zhMsg = getZhMessage(engMsg);
                         if (!silent) {
                             quizStatusMessageDiv.style.display = 'block';
                             quizStatusMessageDiv.className = 'quiz-status-message';
-                            quizStatusMessageDiv.textContent = errorMsg;
+                            quizStatusMessageDiv.textContent = zhMsg;
                         }
-                        return { success: false, code: 2, message: errorMsg };
+                        return { success: false, code: 2, message: zhMsg };
                     }
                     if (response.status === 500) {
                         if (!silent) {
                             quizStatusMessageDiv.style.display = 'block';
                             quizStatusMessageDiv.className = 'quiz-status-message';
-                            quizStatusMessageDiv.textContent = '获取结果失败：服务器异常';
+                            quizStatusMessageDiv.textContent = '服务器异常';
                         }
-                        return { success: false, code: -1 };
+                        return { success: false, code: -1, message: '服务器异常' };
                     }
                     if (!response.ok) {
                         if (!silent) {
                             quizStatusMessageDiv.style.display = 'block';
                             quizStatusMessageDiv.className = 'quiz-status-message';
-                            quizStatusMessageDiv.textContent = '获取结果失败：请求异常';
+                            quizStatusMessageDiv.textContent = '请求异常';
                         }
-                        return { success: false, code: -1 };
+                        return { success: false, code: -1, message: '请求异常' };
                     }
                     
-                    const data = await response.json();
                     if (data && typeof data === 'object' && Array.isArray(data.result)) {
                         if (data.token !== token) {
                             if (!silent) {
                                 quizStatusMessageDiv.style.display = 'block';
                                 quizStatusMessageDiv.className = 'quiz-status-message';
-                                quizStatusMessageDiv.textContent = '返回数据与令牌不匹配';
+                                quizStatusMessageDiv.textContent = '返回数据与访问令牌不匹配';
                             }
-                            return { success: false, code: -1 };
+                            return { success: false, code: -1, message: '访问令牌不匹配' };
                         }
                         return { success: true, data: data };
                     } else {
@@ -230,16 +243,16 @@
                             quizStatusMessageDiv.className = 'quiz-status-message';
                             quizStatusMessageDiv.textContent = '结果数据格式异常';
                         }
-                        return { success: false, code: -1 };
+                        return { success: false, code: -1, message: '数据格式异常' };
                     }
                 } catch (err) {
                     console.error('Fetch result error:', err);
                     if (!silent) {
                         quizStatusMessageDiv.style.display = 'block';
                         quizStatusMessageDiv.className = 'quiz-status-message';
-                        quizStatusMessageDiv.textContent = `获取结果失败：${err.message}`;
+                        quizStatusMessageDiv.textContent = `网络错误：${err.message}`;
                     }
-                    return { success: false, code: -1 };
+                    return { success: false, code: -1, message: err.message };
                 }
             }
             
@@ -260,14 +273,12 @@
                         throw new Error('Paper data error: missing or invalid paper field');
                     for (let i = 0; i < data.paper.length; i++) {
                         const item = data.paper[i];
-                        // 允许 graphic 类型
                         if (!item.type || !['single_selection', 'multiple_selection', 'single_line', 'multiple_line', 'graphic'].includes(item.type))
                             throw new Error(`Paper data error: invalid type for question ${i+1}`);
                         if (typeof item.prompt !== 'string')
                             throw new Error(`Paper data error: missing prompt for question ${i+1}`);
                         if ((item.type === 'single_selection' || item.type === 'multiple_selection') && (!Array.isArray(item.option) || item.option.length === 0))
                             throw new Error(`Paper data error: missing options for question ${i+1}`);
-                        // graphic 类型不需要 option 检查
                     }
                     return data;
                 } catch (err) {
@@ -401,7 +412,6 @@
                             answerItem.appendChild(previewDiv);
                         }
                     } else if (item.type === 'graphic') {
-                        // graphic 题：展示 DataURL 图片
                         const imgWrapper = document.createElement('div');
                         imgWrapper.className = 'graphic-result-wrapper';
                         
@@ -429,55 +439,32 @@
                 });
             }
             
-            async function onTokenVerified() {
+            async function loadResultAndPaper(token, entry) {
+                tokenValue = token;
+                const resultArray = entry.result;
+                
+                const paperId = quizConfig.paper;
+                if (!paperId) throw new Error('Missing paper info');
+                const paperConf = await fetchPaperConfig(paperId);
+                answerSheet = paperConf.paper || [];
+                paperContentUrl = paperConf.content;
+                paperMimeType = paperConf.mime_type;
+                if (!paperContentUrl) throw new Error('Missing paper content URL');
+                
+                let contentData = null;
+                if (paperMimeType === 'text/markdown')
+                    contentData = await fetchPaperContent(paperContentUrl, 'text/markdown');
+                else if (paperMimeType === 'application/pdf')
+                    contentData = paperContentUrl;
+                else
+                    throw new Error(`Unsupported paper type: ${paperMimeType}`);
+                
+                renderPaperContent(contentData, paperMimeType);
+                renderResultAnswerSheet(resultArray);
+                
+                loadingContainer.style.display = 'none';
+                mainContainer.style.display = 'flex';
                 tokenContainer.style.display = 'none';
-                loadingContainer.style.display = 'block';
-                try {
-                    const resultResp = await fetchResult(tokenValue, false);
-                    if (!resultResp.success) {
-                        loadingContainer.style.display = 'none';
-                        tokenContainer.style.display = 'block';
-                        tokenBtn.disabled = false;
-                        tokenBtn.textContent = '验证';
-                        tokenInputArea.style.display = (quizConfig.group === null) ? 'none' : 'block';
-                        quizStatusMessageDiv.style.display = 'block';
-                        return;
-                    }
-                    const entry = resultResp.data;
-                    const resultArray = entry.result;
-                    
-                    const paperId = quizConfig.paper;
-                    if (!paperId) throw new Error('Missing paper info');
-                    const paperConf = await fetchPaperConfig(paperId);
-                    answerSheet = paperConf.paper || [];
-                    paperContentUrl = paperConf.content;
-                    paperMimeType = paperConf.mime_type;
-                    if (!paperContentUrl) throw new Error('Missing paper content URL');
-                    
-                    let contentData = null;
-                    if (paperMimeType === 'text/markdown')
-                        contentData = await fetchPaperContent(paperContentUrl, 'text/markdown');
-                    else if (paperMimeType === 'application/pdf')
-                        contentData = paperContentUrl;
-                    else
-                        throw new Error(`Unsupported paper type: ${paperMimeType}`);
-                    
-                    renderPaperContent(contentData, paperMimeType);
-                    renderResultAnswerSheet(resultArray);
-                    
-                    loadingContainer.style.display = 'none';
-                    mainContainer.style.display = 'flex';
-                } catch (err) {
-                    console.error('Loading error:', err);
-                    loadingContainer.style.display = 'none';
-                    tokenContainer.style.display = 'block';
-                    quizStatusMessageDiv.style.display = 'block';
-                    quizStatusMessageDiv.className = 'quiz-status-message';
-                    quizStatusMessageDiv.textContent = '加载试卷或结果失败：' + (err.message || '未知错误');
-                    tokenBtn.disabled = false;
-                    tokenBtn.textContent = '验证';
-                    tokenInputArea.style.display = (quizConfig.group === null) ? 'none' : 'block';
-                }
             }
             
             async function submitToken() {
@@ -487,24 +474,36 @@
                 
                 const inputToken = tokenInput.value.trim();
                 if (!inputToken) {
-                    quizStatusMessageDiv.style.display = 'block';
-                    quizStatusMessageDiv.className = 'quiz-status-message';
-                    quizStatusMessageDiv.textContent = '请输入访问令牌';
+                    showNotification('请输入访问令牌', 'error');
                     return;
                 }
                 tokenBtn.disabled = true;
                 tokenBtn.textContent = '正在验证';
-                tokenValue = inputToken;
-                await onTokenVerified();
-                tokenBtn.disabled = false;
-                tokenBtn.textContent = '验证';
+                
+                const resultResp = await fetchResult(inputToken, true);
+                if (!resultResp.success) {
+                    showNotification(resultResp.message || '访问令牌无效', 'error');
+                    tokenBtn.disabled = false;
+                    tokenBtn.textContent = '验证';
+                    return;
+                }
+                
+                try {
+                    await loadResultAndPaper(inputToken, resultResp.data);
+                } catch (err) {
+                    console.error('Loading error:', err);
+                    showNotification('加载失败：' + err.message, 'error');
+                    tokenBtn.disabled = false;
+                    tokenBtn.textContent = '验证';
+                    tokenContainer.style.display = 'block';
+                    loadingContainer.style.display = 'none';
+                }
             }
             
             async function autoFetchAndLoad() {
                 const urlParams = new URLSearchParams(window.location.search);
                 const urlToken = urlParams.get('token');
                 
-                // 已在 fetchQuizConfig 中处理 group === null 的情况
                 if (!urlToken || urlToken.trim() === '') {
                     tokenInputArea.style.display = 'block';
                     return;
@@ -514,33 +513,8 @@
                 
                 const resultResp = await fetchResult(urlToken, true);
                 if (resultResp.success) {
-                    tokenValue = urlToken;
                     try {
-                        const entry = resultResp.data;
-                        const resultArray = entry.result;
-                        
-                        const paperId = quizConfig.paper;
-                        if (!paperId) throw new Error('Missing paper info');
-                        const paperConf = await fetchPaperConfig(paperId);
-                        answerSheet = paperConf.paper || [];
-                        paperContentUrl = paperConf.content;
-                        paperMimeType = paperConf.mime_type;
-                        if (!paperContentUrl) throw new Error('Missing paper content URL');
-                        
-                        let contentData = null;
-                        if (paperMimeType === 'text/markdown')
-                            contentData = await fetchPaperContent(paperContentUrl, 'text/markdown');
-                        else if (paperMimeType === 'application/pdf')
-                            contentData = paperContentUrl;
-                        else
-                            throw new Error(`Unsupported paper type: ${paperMimeType}`);
-                        
-                        renderPaperContent(contentData, paperMimeType);
-                        renderResultAnswerSheet(resultArray);
-                        
-                        loadingContainer.style.display = 'none';
-                        mainContainer.style.display = 'flex';
-                        tokenContainer.style.display = 'none';
+                        await loadResultAndPaper(urlToken, resultResp.data);
                     } catch (err) {
                         console.error('Loading error:', err);
                         loadingContainer.style.display = 'none';
@@ -555,11 +529,7 @@
                     tokenContainer.style.display = 'block';
                     quizStatusMessageDiv.style.display = 'block';
                     quizStatusMessageDiv.className = 'quiz-status-message';
-                    if (resultResp.code === 1) {
-                        quizStatusMessageDiv.textContent = '访问令牌无效，请重新输入';
-                    } else {
-                        quizStatusMessageDiv.textContent = resultResp.message || '返回数据异常';
-                    }
+                    quizStatusMessageDiv.textContent = resultResp.message || '返回数据异常';
                     tokenInputArea.style.display = 'block';
                     tokenBtn.disabled = false;
                     tokenBtn.textContent = '验证';

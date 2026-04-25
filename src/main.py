@@ -87,7 +87,7 @@ def asset(filename):
 def quiz(quiz_id):
     quiz_data = res.get_quiz(quiz_id)
     if quiz_data is None:
-        return abort(404, "Quiz not found")
+        return jsonify(return_json(404, "Quiz not found")), 404
     return jsonify(quiz_data[1])
 
 @app.route("/verify", methods=["POST"])
@@ -97,7 +97,7 @@ def verify():
         quiz_id = request_json["quiz"]
         token = request_json["token"]
     except (KeyError, TypeError):
-        return abort(400, "Missing required keys: quiz and token or values are invalid")
+        return jsonify(return_json(400, "Missing required keys: quiz and token or values are invalid")), 400
 
     code, message = check_submission(quiz_id, token)
     return jsonify(return_json(code, message))
@@ -106,7 +106,7 @@ def verify():
 def paper(paper_id):
     paper_data = res.get_paper(paper_id)
     if paper_data is None:
-        return abort(404, "Paper not found")
+        return jsonify(return_json(404, "Paper not found")), 404
     return jsonify(paper_data)
 
 @app.route("/submit", methods=["POST"])
@@ -118,11 +118,11 @@ def submit():
         token = request_json["token"]
         user_answers = request_json["answer"]
     except (KeyError, TypeError):
-        return abort(400, "Missing required keys: quiz, token, answer or values are invalid")
+        return jsonify(return_json(400, "Missing required keys: quiz, token, answer or values are invalid")), 400
 
     quiz_info = res.get_quiz(quiz_id)
     if quiz_info is None:
-        return abort(404, "Quiz not found")
+        return jsonify(return_json(404, "Quiz not found")), 404
 
     quiz_config = quiz_info[1]
     group_id = quiz_config.get("group")
@@ -156,32 +156,34 @@ def submit():
     if res.save_answer(quiz_id, answer_data):
         return jsonify(return_json(0, "Submitted successfully"))
     else:
-        return abort(500, "Failed to save answer")
+        return jsonify(return_json(500, "Failed to save answer")), 500
 
 @app.route("/result/<quiz_id>", methods=["GET"])
 def get_result(quiz_id):
     quiz_info = res.get_quiz(quiz_id)
     if quiz_info is None or quiz_info[1] is None:
-        return abort(404, "Quiz not found")
+        return jsonify(return_json(404, "Quiz not found")), 404
+
     quiz_config = quiz_info[1]
     group_id = quiz_config.get("group")
 
     if group_id is None:
-        return abort(400, "Result not available for this quiz")
+        return jsonify(return_json(400, "Result not available for this quiz")), 400
 
     token = request.args.get("token")
     if not token:
-        return abort(400, "Missing token parameter")
+        return jsonify(return_json(400, "Missing token parameter")), 400
     if not verify_token(quiz_id, token):
-        return abort(400, "Token invalid")
+        return jsonify(return_json(400, "Token invalid")), 400
 
     result = res.get_result(quiz_id)
     if result is None:
-        return abort(404, "Result not found")
+        return jsonify(return_json(404, "Result not found")), 404
+
     for i in result["result"]:
         if i["token"] == token:
             return jsonify(i)
-    return abort(404, "Result not found")
+    return jsonify(return_json(404, "Result not found")), 404
 
 @app.route("/attachment/<path:filename>")
 def attachment(filename):
