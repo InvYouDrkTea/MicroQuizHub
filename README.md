@@ -21,10 +21,20 @@ main.app.run()
 | /attachment/&lt;path:file&gt;               | GET    | Get attachments.              |
 | /result/&lt;quiz_id&gt;?token=&lt;token&gt; | GET    | Get result of quiz for token. |
 
-## GET method return
-All GET methods will return the original content of the corresponding resources.
+## Static resource routes(/page, /asset, /attachment) response
+If there is no exception, the resource itself is returned; if there is an exception, the exception information page is returned.
 
-## POST method return
+## Data routes(/quiz, /paper, /result) response
+If there are no exceptions, return the JSON data itself; if there are exceptions, the returned JSON formatted data follows a general format as below:
+```json
+{
+    "code": <status_code>,
+    "message": "<Manual read message.>"
+}
+```
+The value of the code field is equal to the HTTP status code.
+
+## POST routes(/verify, /submit) response
 All POST methods will return a JSON, general like:
 ```json
 {
@@ -34,9 +44,10 @@ All POST methods will return a JSON, general like:
 ```
 The defined values of status code are as follows:
 - 0 - No error
-- 1 - Value invalid
+- 1 - Token invalid
 - 2 - Submitted (duplicate submissions are not allowed)
 - 3 - Closed
+If an exception other than those defined above occurs, the value of the code field will be equal to the HTTP status code.
 
 ## Quiz configuration
 ```json

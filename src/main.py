@@ -99,8 +99,27 @@ def verify():
     except (KeyError, TypeError):
         return jsonify(return_json(400, "Missing required keys: quiz and token or values are invalid")), 400
 
-    code, message = check_submission(quiz_id, token)
-    return jsonify(return_json(code, message))
+    quiz_info = res.get_quiz(quiz_id)
+    if quiz_info is None:
+        return jsonify(return_json(404, "Quiz not found")), 404
+
+    quiz_config = quiz_info[1]
+    group_id = quiz_config.get("group")
+
+    if group_id is None:
+        return jsonify(return_json(0, "OK"))
+
+    if not verify_token(quiz_id, token):
+        return jsonify(return_json(1, "Token invalid"))
+
+    answer_data = res.get_answer(quiz_id)
+    allow_resubmit = quiz_config.get("allow_resubmit", False)
+    if answer_data is not None and not allow_resubmit:
+        for entry in answer_data.get("answer", []):
+            if entry.get("token") == token:
+                return jsonify(return_json(2, "Submitted, resubmission not allowed"))
+
+    return jsonify(return_json(0, "OK"))
 
 @app.route("/paper/<paper_id>")
 def paper(paper_id):
