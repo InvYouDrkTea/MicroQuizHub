@@ -38,7 +38,7 @@ The value of the code field is equal to the HTTP status code.
 All POST methods will return a JSON, general like:
 ```json
 {
-    "code": "<status_code>",
+    "code": <status_code>,
     "message": "<Manual read message.>"
 }
 ```
@@ -46,7 +46,7 @@ The defined values of status code are as follows:
 - 0 - No error
 - 1 - Token invalid
 - 2 - Submitted (duplicate submissions are not allowed)
-- 3 - Closed
+- 3 - Closed \
 If an exception other than those defined above occurs, the value of the code field will be equal to the HTTP status code.
 
 ## Quiz configuration

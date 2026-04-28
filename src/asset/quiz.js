@@ -1006,12 +1006,12 @@
         const textarea = document.createElement('textarea');
         textarea.className = 'textarea-input';
         textarea.setAttribute('wrap', 'off');
-        textarea.placeholder = '请按LaTeX格式输入，换行请输入\\newline';
+        textarea.placeholder = '请按LaTeX格式输入，换行请输入\\\\';
         textarea.addEventListener('input', () => {
             userAnswers[index] = textarea.value;
             textarea.style.height = 'auto';
             textarea.style.height = Math.max(80, textarea.scrollHeight) + 'px';
-            updateFormulaPreview(`preview_multiple_${index}`, textarea.value, true);
+            updateFormulaPreview(`preview_multiple_${index}`, textarea.value, false);
         });
         const preview = document.createElement('div');
         preview.className = 'multiple-line-preview';
